@@ -38,6 +38,8 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'rest_framework',
+    'vgg_food_vendor_project.food_vendor_app.apps.FoodVendorAppConfig',
+    # 'vgg_food_vendor_project.food_vendor_app.apps',
 ]
 
 MIDDLEWARE = [

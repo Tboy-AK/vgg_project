@@ -1,5 +1,6 @@
 from django.contrib.auth.models import User, Group
 from rest_framework import viewsets, permissions
+from vgg_food_vendor_project.food_vendor_app.models import Auth
 from vgg_food_vendor_project.food_vendor_app.serializers import UserSerialiser, GroupSerialiser
 
 
