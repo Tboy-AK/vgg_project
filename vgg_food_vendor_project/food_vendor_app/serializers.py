@@ -3,66 +3,73 @@ from rest_framework import serializers
 from vgg_food_vendor_project.food_vendor_app import models as inAppModels
 
 
-class UserSerialiser(serializers.HyperlinkedModelSerializer):
+class UserSerializer(serializers.HyperlinkedModelSerializer):
     class Meta:
         model = User
-        fields = ['url', 'username', 'email', 'groups']
+        fields = ['id', 'url', 'username', 'email', 'groups']
 
 
-class GroupSerialiser(serializers.HyperlinkedModelSerializer):
+class GroupSerializer(serializers.HyperlinkedModelSerializer):
     class Meta:
         model = Group
-        fields = ['url', 'name']
+        fields = ['id', 'url', 'name']
 
 
-class AuthSerialiser(serializers.ModelSerializer):
-    class Meta:
-        model = inAppModels.Auth
-        fields = ['email', 'password', 'dateTimeCreated', 'dateTimeModified']
-
-
-class VendorSerialiser(serializers.ModelSerializer):
+class VendorSerializer(serializers.ModelSerializer):
     class Meta:
         model = inAppModels.Vendor
-        fields = ['businessName', 'phoneNumber',
-                  'dateTimeCreated', 'dateTimeModified', 'auth_id']
+        fields = ['id', 'businessName', 'email', 'phoneNumber',
+                  'dateTimeCreated', 'dateTimeModified']
 
 
-class CustomerSerialiser(serializers.ModelSerializer):
+class CustomerSerializer(serializers.ModelSerializer):
     class Meta:
         model = inAppModels.Customer
-        fields = ['firstname', 'lastname', 'phoneNumber',
-                  'dateTimeCreated', 'dateTimeModified', 'auth_id']
+        fields = ['id', 'firstname', 'lastname', 'email', 'phoneNumber',
+                  'dateTimeCreated', 'dateTimeModified']
 
 
-class MenuSerialiser(serializers.ModelSerializer):
+class AuthSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = inAppModels.Auth
+        fields = ['id', 'email', 'password', 'userTypeId',
+                  'dateTimeCreated', 'dateTimeModified']
+
+
+class UserTypeSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = inAppModels.UserType
+        fields = ['id', 'userTypeName', 'dateTimeCreated', 'dateTimeModified']
+
+
+class MenuSerializer(serializers.ModelSerializer):
     class Meta:
         model = inAppModels.Menu
-        fields = ['name', 'description', 'price', 'quantity', 'dateTimeCreated',
+        fields = ['id', 'name', 'description', 'price', 'quantity', 'dateTimeCreated',
                   'vendorId', 'isRecurring', 'frequencyOfReocurrence']
 
 
-class OrderSerialiser(serializers.ModelSerializer):
+class OrderSerializer(serializers.ModelSerializer):
     class Meta:
         model = inAppModels.Order
-        fields = ['customerId', 'vendorId', 'description', 'itemsOrdered', 'amountDue',
+        fields = ['id', 'customerId', 'vendorId', 'description', 'itemsOrdered', 'amountDue',
                   'amountPaid', 'amountOutstanding', 'orderStatusId', 'menuId', 'dateAndTimeOfOrder']
 
 
-class OrderStatusSerialiser(serializers.ModelSerializer):
+class OrderStatusSerializer(serializers.ModelSerializer):
     class Meta:
         model = inAppModels.OrderStatus
-        fields = ['name']
+        fields = ['id', 'name']
 
 
-class NotificationSerialiser(serializers.ModelSerializer):
+class NotificationSerializer(serializers.ModelSerializer):
     class Meta:
         model = inAppModels.Notification
-        fields = ['fromVendor', 'toCustomer', 'orderId',
+        fields = ['id', 'subjectUser', 'orderId',
                   'message', 'dateTimeCreated', 'messageStatusId']
 
 
-class MessageStatusSerialiser(serializers.ModelSerializer):
+class MessageStatusSerializer(serializers.ModelSerializer):
     class Meta:
         model = inAppModels.MessageStatus
-        fields = ['name']
+        fields = ['id', 'name']

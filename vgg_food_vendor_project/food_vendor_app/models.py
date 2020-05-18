@@ -7,13 +7,13 @@ class Vendor(models.Model):
 
     businessName = models.CharField(max_length=100)
 
+    email = models.EmailField(max_length=100)
+
     phoneNumber = models.CharField(max_length=16, unique=True)
 
     dateTimeCreated = models.DateTimeField(auto_now_add=True, editable=False)
 
     dateTimeModified = models.DateTimeField(auto_now=True)
-
-    auth_id = models.ForeignKey("Auth", on_delete=models.CASCADE)
 
 
 class Customer(models.Model):
@@ -22,20 +22,31 @@ class Customer(models.Model):
 
     lastname = models.CharField(max_length=32)
 
+    email = models.EmailField(max_length=100)
+
     phoneNumber = models.CharField(max_length=16, unique=True)
 
     dateTimeCreated = models.DateTimeField(auto_now_add=True, editable=False)
 
     dateTimeModified = models.DateTimeField(auto_now=True)
 
-    auth_id = models.ForeignKey("Auth", on_delete=models.CASCADE)
-
 
 class Auth(models.Model):
 
-    email = models.CharField(max_length=100, unique=True)
+    email = models.EmailField(max_length=100)
 
-    password = models.CharField(max_length=32)
+    password = models.TextField()
+
+    dateTimeCreated = models.DateTimeField(auto_now_add=True, editable=False)
+
+    dateTimeModified = models.DateTimeField(auto_now=True)
+
+    userTypeId = models.ForeignKey("UserType", on_delete=models.CASCADE)
+
+
+class UserType(models.Model):
+
+    userTypeName = models.CharField(max_length=16, unique=True)
 
     dateTimeCreated = models.DateTimeField(auto_now_add=True, editable=False)
 
@@ -92,9 +103,7 @@ class OrderStatus(models.Model):
 
 class Notification(models.Model):
 
-    fromVendor = models.ForeignKey("Vendor", on_delete=models.CASCADE)
-
-    toCustomer = models.ForeignKey("Customer", on_delete=models.CASCADE)
+    subjectUser = models.ForeignKey("Auth", on_delete=models.CASCADE)
 
     orderId = models.ForeignKey("Order", on_delete=models.CASCADE)
 
