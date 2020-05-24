@@ -17,8 +17,7 @@ from django.contrib import admin
 from django.urls import include, path
 
 urlpatterns = [
-    path('', include('vgg_food_vendor_project.food_vendor_app.urls')),
+    path('api/', include('vgg_food_vendor_project.food_vendor_app.urls')),
     path('admin/', admin.site.urls),
-    path('api-auth/', include('rest_framework.urls', namespace='rest_framework')),
-    # path('vgg-food-vendor/', include('vgg_food_vendor_project.food_vendor_app.urls')),
+    path('api-auth/', include('rest_framework.urls', namespace='rest_framework'))
 ]

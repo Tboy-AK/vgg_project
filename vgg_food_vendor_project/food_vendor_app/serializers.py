@@ -1,18 +1,5 @@
-from django.contrib.auth.models import User, Group
 from rest_framework import serializers
 from vgg_food_vendor_project.food_vendor_app import models as inAppModels
-
-
-class UserSerializer(serializers.HyperlinkedModelSerializer):
-    class Meta:
-        model = User
-        fields = ['id', 'url', 'username', 'email', 'groups']
-
-
-class GroupSerializer(serializers.HyperlinkedModelSerializer):
-    class Meta:
-        model = Group
-        fields = ['id', 'url', 'name']
 
 
 class VendorSerializer(serializers.ModelSerializer):
@@ -32,28 +19,28 @@ class CustomerSerializer(serializers.ModelSerializer):
 class AuthSerializer(serializers.ModelSerializer):
     class Meta:
         model = inAppModels.Auth
-        fields = ['id', 'email', 'password', 'userTypeId',
+        fields = ['id', 'email', 'password',
                   'dateTimeCreated', 'dateTimeModified']
-
-
-class UserTypeSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = inAppModels.UserType
-        fields = ['id', 'userTypeName', 'dateTimeCreated', 'dateTimeModified']
 
 
 class MenuSerializer(serializers.ModelSerializer):
     class Meta:
         model = inAppModels.Menu
-        fields = ['id', 'name', 'description', 'price', 'quantity', 'dateTimeCreated',
-                  'vendorId', 'isRecurring', 'frequencyOfReocurrence']
+        fields = ['id', 'name', 'description', 'price', 'quantity', 'unit',
+                  'dateTimeCreated', 'vendorId', 'isRecurring', 'frequencyOfReoccurrence']
 
 
 class OrderSerializer(serializers.ModelSerializer):
     class Meta:
         model = inAppModels.Order
         fields = ['id', 'customerId', 'vendorId', 'description', 'itemsOrdered', 'amountDue',
-                  'amountPaid', 'amountOutstanding', 'orderStatusId', 'menuId', 'dateAndTimeOfOrder']
+                  'amountPaid', 'amountOutstanding', 'orderStatusId', 'menuId', 'dateAndTimeOfOrder', 'preOrderDateTime']
+
+
+class Order_OrderStatusSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = inAppModels.Order
+        fields = ['orderStatusId']
 
 
 class OrderStatusSerializer(serializers.ModelSerializer):

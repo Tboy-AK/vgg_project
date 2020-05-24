@@ -7,13 +7,13 @@ class Vendor(models.Model):
 
     businessName = models.CharField(max_length=100)
 
-    email = models.EmailField(max_length=100)
+    email = models.EmailField(max_length=100, unique=True)
 
     phoneNumber = models.CharField(max_length=16, unique=True)
 
     dateTimeCreated = models.DateTimeField(auto_now_add=True, editable=False)
 
-    dateTimeModified = models.DateTimeField(auto_now=True)
+    dateTimeModified = models.DateTimeField(auto_now=True, editable=False)
 
 
 class Customer(models.Model):
@@ -22,40 +22,29 @@ class Customer(models.Model):
 
     lastname = models.CharField(max_length=32)
 
-    email = models.EmailField(max_length=100)
+    email = models.EmailField(max_length=100, unique=True)
 
     phoneNumber = models.CharField(max_length=16, unique=True)
 
     dateTimeCreated = models.DateTimeField(auto_now_add=True, editable=False)
 
-    dateTimeModified = models.DateTimeField(auto_now=True)
+    dateTimeModified = models.DateTimeField(auto_now=True, editable=False)
 
 
 class Auth(models.Model):
 
-    email = models.EmailField(max_length=100)
+    email = models.EmailField(max_length=100, unique=True)
 
     password = models.TextField()
 
     dateTimeCreated = models.DateTimeField(auto_now_add=True, editable=False)
 
-    dateTimeModified = models.DateTimeField(auto_now=True)
-
-    userTypeId = models.ForeignKey("UserType", on_delete=models.CASCADE)
-
-
-class UserType(models.Model):
-
-    userTypeName = models.CharField(max_length=16, unique=True)
-
-    dateTimeCreated = models.DateTimeField(auto_now_add=True, editable=False)
-
-    dateTimeModified = models.DateTimeField(auto_now=True)
+    dateTimeModified = models.DateTimeField(auto_now=True, editable=False)
 
 
 class Menu(models.Model):
 
-    name = models.CharField(max_length=50)
+    name = models.CharField(max_length=50, unique=True)
 
     description = models.TextField()
 
@@ -63,13 +52,16 @@ class Menu(models.Model):
 
     quantity = models.IntegerField()
 
+    unit = models.CharField(max_length=16)
+
     dateTimeCreated = models.DateTimeField(auto_now_add=True, editable=False)
 
     vendorId = models.ForeignKey("Vendor", on_delete=models.CASCADE)
 
-    isRecurring = models.BooleanField()
+    isRecurring = models.BooleanField(default=False)
 
-    frequencyOfReocurrence = models.IntegerField()
+    frequencyOfReoccurrence = ArrayField(
+        base_field=models.CharField(max_length=10), size=7)
 
 
 class Order(models.Model):
@@ -80,7 +72,7 @@ class Order(models.Model):
 
     description = models.TextField()
 
-    itemsOrdered = ArrayField(base_field=models.CharField(max_length=50))
+    itemsOrdered = ArrayField(base_field=models.IntegerField())
 
     amountDue = models.CharField(max_length=50)
 
@@ -90,10 +82,10 @@ class Order(models.Model):
 
     orderStatusId = models.ForeignKey("OrderStatus", on_delete=models.CASCADE)
 
-    menuId = models.ForeignKey("Menu", on_delete=models.CASCADE)
-
     dateAndTimeOfOrder = models.DateTimeField(
         auto_now_add=True, editable=False)
+
+    preOrderDateTime = models.DateTimeField(null=True)
 
 
 class OrderStatus(models.Model):

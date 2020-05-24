@@ -1,333 +1,732 @@
 from os import getenv
-from rest_framework.decorators import api_view
+from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
-from rest_framework.views import APIView
-from vgg_food_vendor_project.food_vendor_app.models import Auth, Customer, Menu, MessageStatus, Notification, Order, OrderStatus, Vendor, UserType
-from vgg_food_vendor_project.food_vendor_app.serializers import UserSerializer, GroupSerializer, AuthSerializer, CustomerSerializer, MenuSerializer, MessageStatusSerializer, NotificationSerializer, OrderSerializer, OrderStatusSerializer, VendorSerializer, UserTypeSerializer
+import jwt
+from rest_framework_jwt.settings import api_settings
+from rest_framework_jwt.authentication import JSONWebTokenAuthentication
+import datetime
+from vgg_food_vendor_project.food_vendor_app.models import Auth, Customer, Menu, MessageStatus, Notification, Order, OrderStatus, Vendor
+from vgg_food_vendor_project.food_vendor_app.serializers import AuthSerializer, CustomerSerializer, MenuSerializer, MessageStatusSerializer, NotificationSerializer, OrderSerializer, Order_OrderStatusSerializer, OrderStatusSerializer, VendorSerializer
 
 
-def getSingularDataObject(self, relationalModel, id):
+#########################################################################################
+# GLOBAL FUNCTIONS DEFINITION
+#########################################################################################
+
+
+def getDataById(relationalModel, relationId, modelSerializer):
     """
-    Function that gets a database row by id.
+    Function that gets data by id.
     """
+
     try:
-        return relationalModel.objects.get(id=id)
+        relationObject = relationalModel.objects.get(id=relationId)
     except relationalModel.DoesNotExist:
-        return Response(status=status.HTTP_401_UNAUTHORIZED)
+        return None
+
+    return modelSerializer(relationObject)
+
+
+def userAuthProcess(request, userType):
+    """
+    Function that handles both authentication and authorization of users.
+    """
+
+    # Authenticate user
+
+    accessToken = request.headers['Authorization']
+
+    if not accessToken:
+        return {'error': {
+            'message': '', 'status': status.HTTP_403_FORBIDDEN}}
+
+    try:
+        userPayload = api_settings.JWT_DECODE_HANDLER(accessToken)
+    except:
+        return {
+            'error': {'message': 'Log on to {}/login to login'.format(request.META['HTTP_HOST']),
+                      'status': status.HTTP_401_UNAUTHORIZED}
+        }
+
+    # Authorize user
+
+    if userPayload['userType'] != userType:
+        return {'error': {
+            'message': '', 'status': status.HTTP_403_FORBIDDEN}}
+
+    return userPayload
+
+
+def filterDataArrayById(dataArray, id):
+    """
+    Function that gets an object from an array by Id.
+    """
+
+    for dataObject in dataArray:
+        if dataObject['id'] == id:
+            return dataObject
+
+    return Response(status=status.HTTP_404_NOT_FOUND)
+
+
+#########################################################################################
+# LANDING VIEW
+#########################################################################################
 
 
 class HomeDescAPIView(APIView):
     """
-    API endpoint that allows vendors to be viewed or created.
+    API endpoint that gives a summarised description of the app.
     """
 
-    def get(self):
+    def get(self, request):
         """
-        Endpoint method that allows all vendors to be viewed.
+        API method that allows all vendors to be viewed.
         """
-
-        app_base_route = getenv(
-            'APP_BASE_ROUTE', 'http://localhost:8000/vgg-food-vendor')
 
         return Response({
-            'vendor/': '{}/vendor/'.format(app_base_route),
-            'customer/': '{}/customer/'.format(app_base_route),
-            'auth-user/': '{}/auth-user/'.format(app_base_route),
-            'menu/': '{}/menu/'.format(app_base_route),
-            'order/': '{}/order/'.format(app_base_route),
-            'order-status/': '{}/order-status/'.format(app_base_route),
-            'notification/': '{}/notification/'.format(app_base_route),
-            'message-status/': '{}/message-status/'.format(app_base_route),
-            'user-type/': '{}/user-type/'.format(app_base_route),
+            # authentication
+            'login/POST': '{}login/'.format(request.META['HTTP_HOST']),
+            'vendor/GET-POST/': '{}vendor/'.format(request.META['HTTP_HOST']),
+            'customer-signup/POST/': '{}customer/'.format(request.META['HTTP_HOST']),
+            'token/refresh/POST': '{}token/refresh/'.format(request.META['HTTP_HOST']),
+
+            # auth vendor
+            'auth-vendor-menu/GET-POST/': '{}auth/vendor/menu/'.format(request.META['HTTP_HOST']),
+            'auth-vendor-menu/GET-PUT-DELETE/': '{}auth/vendor/menu/1/'.format(request.META['HTTP_HOST']),
+            'auth-vendor-order/GET/': '{}auth/vendor/order/'.format(request.META['HTTP_HOST']),
+            'auth-vendor-order/GET-PATCH/order-status/': '{}auth/vendor/order/1/'.format(request.META['HTTP_HOST']),
+            'auth-vendor-sales/GET/': '{}auth/vendor/sales/'.format(request.META['HTTP_HOST']),
+            'auth-vendor-notification/POST/customer/': '{}auth/vendor/notification/<int:customer_id>/'.format(request.META['HTTP_HOST']),
+            'auth-vendor-notification/GET/': '{}auth/vendor/notification/'.format(request.META['HTTP_HOST']),
+
+            # public
+            'get-all-menus/GET/': '{}menu/'.format(request.META['HTTP_HOST']),
+            'get-all-menu-by-a-vendor/GET/': '{}vendor/1/menu/'.format(request.META['HTTP_HOST']),
+            'get-a-menu/GET/': '{}menu/1/'.format(request.META['HTTP_HOST']),
+
+            # auth customer
+            'auth-customer-order/GET-POST/': '{}auth/customer/order/'.format(request.META['HTTP_HOST']),
+            'notification/GET/': '{}auth/customer/notification/'.format(request.META['HTTP_HOST']),
+
+            'get-a-vendor/': '{}vendor/1/'.format(request.META['HTTP_HOST']),
         })
 
 
+#########################################################################################
+# AUTHENTICATE APP USERS
+#########################################################################################
+
+
+# user login
+class LoginAPIView(APIView):
+    """
+    API endpoint that allows users to log in.
+    """
+
+    def generateToken(self, modelSerializer, userType):
+        userObject = {'username': modelSerializer.data['email'],
+                      'pk': modelSerializer.data['id'],
+                      'userType': userType,
+                      }
+        tokenPayload = api_settings.JWT_PAYLOAD_HANDLER(userObject)
+        return api_settings.JWT_ENCODE_HANDLER(tokenPayload)
+
+    def post(self, request):
+        """
+        API method that allows a user to log in.
+        """
+
+        # check that user is signed up
+
+        try:
+            authUser = Auth.objects.get(
+                email=request.data['email'])
+        except Auth.DoesNotExist:
+            return Response({
+                'message': 'You are not registered on this FVA app. Log on to {}vendor/ to sign up as a vendor or {}customer/ to sign up as customer'.format(request.META['HTTP_HOST'])
+            }, status=status.HTTP_401_UNAUTHORIZED)
+
+        # authenticate user
+
+        try:
+            authUser = Auth.objects.get(
+                email=request.data['email'], password=request.data['password'])
+        except Auth.DoesNotExist:
+            return Response({
+                'message': 'Wrong username or password'
+            }, status=status.HTTP_401_UNAUTHORIZED)
+
+        serializer = AuthSerializer(authUser)
+        userId = serializer.data['id']
+
+        # confirm user profile
+
+        try:
+            vendor = Vendor.objects.get(email=request.data['email'])
+        except Vendor.DoesNotExist:
+            vendor = None
+
+        try:
+            customer = Customer.objects.get(email=request.data['email'])
+        except Customer.DoesNotExist:
+            customer = None
+
+        # process response
+
+        if vendor == None and customer == None:
+            return Response({
+                'message': 'No user profile matching this user. Contact us at help@fva.org to rectify this issue.'
+            }, status=status.HTTP_404_NOT_FOUND)
+
+        if vendor == None:
+            customerSerializer = CustomerSerializer(customer)
+            accessToken = self.generateToken(customerSerializer, 'customer')
+            return Response(
+                {'lastLogin': str(datetime.datetime.utcnow()),
+                 'data': customerSerializer.data},
+                headers={
+                    'Authorization': accessToken
+                })
+
+        if customer == None:
+            vendorSerializer = VendorSerializer(vendor)
+            accessToken = self.generateToken(vendorSerializer, 'vendor')
+            return Response(
+                {'lastLogin': str(datetime.datetime.utcnow()),
+                 'data': vendorSerializer.data},
+                headers={
+                    'Authorization': accessToken
+                })
+
+        return Response({
+            'message': 'Conflicting user profile. Contact us at help@fva.org to rectify this issue.'
+        }, status=status.HTTP_422_UNPROCESSABLE_ENTITY)
+
+
+# vendor view, vendor sign up
 class VendorAPIView(APIView):
     """
-    API endpoint that allows vendors to be viewed or created.
+    API endpoint that allows vendors to be viewed.
     """
 
     def get(self, request):
         """
-        Endpoint method that allows all vendors to be viewed.
+        API method that allows all vendors to be viewed.
         """
+
         vendors = Vendor.objects.all()
-        serializer = VendorSerializer(vendors, many=True)
-        return Response({
-            'requiredFields': {'businessName': '', 'email': '', 'phoneNumber': '', 'password': ''},
-            'responseData': serializer.data,
-        })
+        vendorSerializer = VendorSerializer(vendors, many=True)
+        return Response(vendorSerializer.data)
 
     def post(self, request):
         """
-        Endpoint method that allows a new vendor to be created.
+        API method that allows a new vendor to be created.
         """
-        serializer = VendorSerializer(data=request.data)
 
-        try:
-            userType = UserType.objects.get(userTypeName='vendor')
-        except UserType.DoesNotExist:
-            return Response(status=status.HTTP_401_UNAUTHORIZED)
-
-        userTypeSerializer = UserTypeSerializer(userType)
-        request.data['userTypeId'] = userTypeSerializer.data['id']
+        # register user
 
         authSerializer = AuthSerializer(data=request.data)
 
-        if serializer.is_valid():
-            serializer.save()
-            if authSerializer.is_valid():
+        if authSerializer.is_valid():
+
+            # create user profile
+
+            vendorSerializer = VendorSerializer(data=request.data)
+
+            if vendorSerializer.is_valid():
                 authSerializer.save()
-            else:
-                return Response(authSerializer.errors, status=status.HTTP_404_NOT_FOUND)
-            serializingResponse = serializer.data
-            serializingResponse['userTypeName'] = 'vendor'
-            return Response(serializingResponse, status=status.HTTP_201_CREATED)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+                vendorSerializer.save()
+                return Response(vendorSerializer.data, status=status.HTTP_201_CREATED)
+            return Response(vendorSerializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        else:
+            return Response(authSerializer.errors, status=status.HTTP_404_NOT_FOUND)
 
 
-class TargetVendorAPIView(APIView):
-    """
-    API endpoint that allows a vendor to be viewed or edited.
-    """
-
-    def get(self, request, id):
-        """
-        Endpoint method that gets a database row by id.
-        """
-        userType = getSingularDataObject(Vendor, id)
-        serializer = VendorSerializer(userType)
-        return Response(serializer.data)
-
-
+# customer-signup
 class CustomerAPIView(APIView):
-    """
-    API endpoint that allows customers to be viewed or created.
-    """
-
-    def get(self, request):
-        """
-        Endpoint method that allows all customers to be viewed.
-        """
-        customers = Customer.objects.all()
-        serializer = CustomerSerializer(customers, many=True)
-        return Response({
-            'requiredFields': {'firstname': '', 'lastname': '', 'email': '', 'phoneNumber': '', 'password': ''},
-            'responseData': serializer.data,
-        })
-
-    def post(self, request):
-        """
-        Endpoint method that allows a new customer to be created.
-        """
-
-        serializer = UserTypeSerializer(data=request.data)
-
-        try:
-            userType = UserType.objects.get(userTypeName='customer')
-        except UserType.DoesNotExist:
-            return Response(status=status.HTTP_400_BAD_REQUEST)
-
-        userTypeSerializer = UserTypeSerializer(userType)
-        request.data['userTypeId'] = userTypeSerializer.data['id']
-
-        authSerializer = AuthSerializer(data=request.data)
-
-        if serializer.is_valid():
-            serializer.save()
-            if authSerializer.is_valid():
-                authSerializer.save()
-            else:
-                return Response(authSerializer.errors, status=status.HTTP_400_BAD_REQUEST)
-            serializingResponse = serializer.data
-            serializingResponse['userTypeName'] = 'customer'
-            return Response(serializingResponse, status=status.HTTP_201_CREATED)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-
-class TargetCustomerAPIView(APIView):
     """
     API endpoint that allows a customer to be viewed or edited.
     """
 
-    def get(self, request, id):
+    def post(self, request):
         """
-        Endpoint method that gets a database row by id.
+        API method that allows a new customer to be created.
         """
-        userType = getSingularDataObject(Customer, id)
-        serializer = CustomerSerializer(userType)
-        return Response(serializer.data)
+
+        # register user
+
+        authSerializer = AuthSerializer(data=request.data)
+
+        if authSerializer.is_valid():
+
+            # create user profile
+
+            customerSerializer = CustomerSerializer(data=request.data)
+
+            if customerSerializer.is_valid():
+                authSerializer.save()
+                customerSerializer.save()
+                return Response(customerSerializer.data, status=status.HTTP_201_CREATED)
+            return Response(customerSerializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        else:
+            return Response(authSerializer.errors, status=status.HTTP_404_NOT_FOUND)
 
 
-class AuthAPIView(APIView):
+#########################################################################################
+# VIEWS FOR AUTHENTICATED VENDORS
+#########################################################################################
+
+
+# auth vendor view menu, create menu
+class AuthVendorMenuAPIView(APIView):
     """
-    API endpoint that allows Auth users to be viewed or created.
+    API endpoint that allows vendor to create a food menu and view all authorized food menu.
     """
 
     def get(self, request):
         """
-        Endpoint method that allows all Auth users to be viewed.
+        API method that allows vendor to view all food menu.
         """
-        authUsers = Auth.objects.all()
-        serializer = AuthSerializer(authUsers, many=True)
-        return Response(serializer.data)
+
+        # Authenticate/Authorize user
+
+        userPayload = userAuthProcess(request, 'vendor')
+
+        if userPayload['error']:
+            return Response({'message': userPayload['error']['message']
+                             }, status=userPayload['error']['status'])
+
+        try:
+            menu = Menu.objects.get(vendorId=userPayload['user_id'])
+        except Menu.DoesNotExist:
+            return Response({'message': 'You have not created any food menu recently'}, status=status.HTTP_204_NO_CONTENT)
+
+        menuSerializer = MenuSerializer(menu, many=True)
+        return Response(menuSerializer.data)
+
+    def post(self, request):
+        """
+        API method that allows a new food menu to be created.
+        """
+
+        # Authenticate/Authorize user
+
+        userPayload = userAuthProcess(request, 'vendor')
+
+        if userPayload['error']:
+            return Response({'message': userPayload['error']['message']
+                             }, status=userPayload['error']['status'])
+
+        # validate input data
+
+        if request.data['isRecurring'] == True and len(request.data['frequencyOfReoccurrence']) < 1:
+            return Response({'message': 'Frequency of re-occurrence must be stated if menu re-occurs'
+                             }, status=status.HTTP_400_BAD_REQUEST)
+
+        if request.data['isRecurring'] == False and len(request.data['frequencyOfReoccurrence']) > 0:
+            return Response({'message': 'Frequency of re-occurrence must be nil if menu does not re-occur'
+                             }, status=status.HTTP_400_BAD_REQUEST)
+
+        # Create the food menu
+
+        menuRequestData = {**request.data}
+        menuRequestData['vendorId'] = userPayload['user_id']
+
+        menuSerializer = MenuSerializer(data=menuRequestData)
+
+        if menuSerializer.is_valid():
+            menuSerializer.save()
+            return Response(menuSerializer.data, status=status.HTTP_201_CREATED)
+        return Response(menuSerializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
-class UserTypeAPIView(APIView):
+# auth vendor view a menu, update a menu, delete a menu
+class AuthVendorMenuDetailAPIView(APIView):
     """
-    API endpoint that allows UserType users to be viewed or created.
+    API endpoint that allows vendor to create a food menu and view all authorized food menu.
+    """
+
+    def get(self, request, menu_id):
+        """
+        API method that allows vendor to view all food menu.
+        """
+
+        # Authenticate/Authorize user
+
+        userPayload = userAuthProcess(request, 'vendor')
+
+        if userPayload['error']:
+            return Response({'message': userPayload['error']['message']
+                             }, status=userPayload['error']['status'])
+
+        try:
+            menu = Menu.objects.get(
+                vendorId=userPayload['user_id'], id=menu_id)
+        except Menu.DoesNotExist:
+            return Response(status=status.HTTP_404_NOT_FOUND)
+
+        menuSerializer = MenuSerializer(menu)
+        return Response(menuSerializer.data)
+
+    def put(self, request, menu_id):
+        """
+        API method that allows a new food menu to be created.
+        """
+
+        # Authenticate/Authorize user
+
+        userPayload = userAuthProcess(request, 'vendor')
+
+        if userPayload['error']:
+            return Response({'message': userPayload['error']['message']
+                             }, status=userPayload['error']['status'])
+
+        # validate input data
+
+        if request.data['isRecurring'] == True and len(request.data['frequencyOfReoccurrence']) < 1:
+            return Response({'message': 'Frequency of re-occurrence must be stated if menu re-occurs'
+                             }, status=status.HTTP_400_BAD_REQUEST)
+
+        if request.data['isRecurring'] == False and len(request.data['frequencyOfReoccurrence']) > 0:
+            return Response({'message': 'Frequency of re-occurrence must be nil if menu does not re-occur'
+                             }, status=status.HTTP_400_BAD_REQUEST)
+
+        menuRequestData = {**request.data}
+
+        for k in menuRequestData.items():
+            if k in ['id', 'dateTimeCreated', 'vendorId']:
+                menuRequestData.pop(k)
+
+        # Get the required menu
+
+        try:
+            menu = Menu.objects.get(
+                vendorId=userPayload['user_id'], id=menu_id)
+        except Menu.DoesNotExist:
+            return Response(status=status.HTTP_404_NOT_FOUND)
+
+        # Update the food menu
+
+        menuSerializer = MenuSerializer(menu, menuRequestData)
+
+        if menuSerializer.is_valid():
+            menuSerializer.save()
+            return Response(menuSerializer.data, status=status.HTTP_200_OK)
+        return Response(menuSerializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    def delete(self, request, menu_id):
+        """
+        API method that allows a new food menu to be created.
+        """
+
+        # Authenticate/Authorize user
+
+        userPayload = userAuthProcess(request, 'vendor')
+
+        if userPayload['error']:
+            return Response({'message': userPayload['error']['message']
+                             }, status=userPayload['error']['status'])
+
+        # Get the required food menu
+
+        try:
+            menu = Menu.objects.get(
+                vendorId=userPayload['user_id'], id=menu_id)
+        except Menu.DoesNotExist:
+            return Response(status=status.HTTP_403_FORBIDDEN)
+
+        # Delete the food menu
+
+        menu.delete()
+        return Response({'message': 'Successfully deleted'}, status=status.HTTP_200_OK)
+
+
+# auth vendor view orders
+class AuthVendorOrderAPIView(APIView):
+    """
+    API endpoint that allows authorized vendors view all authorized food order.
     """
 
     def get(self, request):
         """
-        Endpoint method that allows all user types to be viewed.
+        API method that allows customer to view all food orders.
         """
-        userType = UserType.objects.all()
-        serializer = UserTypeSerializer(userType, many=True)
-        return Response(serializer.data)
+
+        # Authenticate/Authorize user
+
+        userPayload = userAuthProcess(request, 'vendor')
+
+        if userPayload['error']:
+            return Response({'message': userPayload['error']['message']
+                             }, status=userPayload['error']['status'])
+
+        # check for vendors orders
+
+        try:
+            order = Order.objects.get(vendorId=userPayload['user_id'])
+        except Order.DoesNotExist:
+            return Response({'message': 'No orders have been made to you in a while'}, status=status.HTTP_204_NO_CONTENT)
+
+        orderSerializer = OrderSerializer(order, many=True)
+        return Response(orderSerializer.data)
 
 
+# auth vendor view an order, update order status
+class AuthVendorOrderDetailAPIView(APIView):
+    """
+    API endpoint that allows vendor to create a food menu and view all authorized food menu.
+    """
+
+    def get(self, request, order_id):
+        """
+        API method that allows vendor to view all food order.
+        """
+
+        # Authenticate/Authorize user
+
+        userPayload = userAuthProcess(request, 'vendor')
+
+        if userPayload['error']:
+            return Response({'message': userPayload['error']['message']
+                             }, status=userPayload['error']['status'])
+
+        try:
+            order = Order.objects.get(
+                vendorId=userPayload['user_id'], id=order_id)
+        except Order.DoesNotExist:
+            return Response(status=status.HTTP_404_NOT_FOUND)
+
+        orderSerializer = OrderSerializer(order)
+        return Response(orderSerializer.data)
+
+    def put(self, request, order_id):
+        """
+        API method that allows a new food order to be created.
+        """
+
+        # Authenticate/Authorize user
+
+        userPayload = userAuthProcess(request, 'vendor')
+
+        if userPayload['error']:
+            return Response({'message': userPayload['error']['message']
+                             }, status=userPayload['error']['status'])
+
+        # Get the required order
+
+        try:
+            order = Order.objects.get(
+                vendorId=userPayload['user_id'], id=order_id)
+        except Order.DoesNotExist:
+            return Response(status=status.HTTP_404_NOT_FOUND)
+
+        # check that order status exists in database
+
+        try:
+            orderStatus = OrderStatus.objects.get(
+                name=request.data['orderStatus'])
+        except OrderStatus.DoesNotExist:
+            return Response({'message': 'Invalid order status'}, status=status.HTTP_404_NOT_FOUND)
+
+        orderStatusIdData = {'orderStatusId': orderStatus['id']}
+
+        # Update the food order
+
+        orderSerializer = OrderSerializer(order, orderStatusIdData)
+
+        if orderSerializer.is_valid():
+            orderSerializer.save()
+            return Response(orderSerializer.data, status=status.HTTP_200_OK)
+        return Response(orderSerializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+#########################################################################################
+# VIEWS FOR AUTHENTICATED CUSTOMERS
+#########################################################################################
+
+
+# auth customer view orders, create order
+class AuthCustomerOrderAPIView(APIView):
+    """
+    API endpoint that allows customer to create a food order and view all authorized food order.
+    """
+
+    def get(self, request):
+        """
+        API method that allows customer to view all food orders.
+        """
+
+        # Authenticate/Authorize user
+
+        userPayload = userAuthProcess(request, 'customer')
+
+        if userPayload['error']:
+            return Response({'message': userPayload['error']['message']
+                             }, status=userPayload['error']['status'])
+
+        try:
+            order = Order.objects.get(customerId=userPayload['user_id'])
+        except Order.DoesNotExist:
+            return Response({'message': 'You have not made any order recently'}, status=status.HTTP_204_NO_CONTENT)
+
+        orderSerializer = OrderSerializer(order, many=True)
+        return Response(orderSerializer.data)
+
+    def post(self, request):
+        """
+        API method that allows a new food order to be created.
+        """
+
+        # Authenticate/Authorize user
+
+        userPayload = userAuthProcess(request, 'customer')
+
+        if userPayload['error']:
+            return Response({'message': userPayload['error']['message']
+                             }, status=userPayload['error']['status'])
+
+        # Create the food order
+
+        orderRequestData = {**request.data}
+        orderRequestData['customerId'] = userPayload['user_id']
+
+        orderSerializer = OrderSerializer(data=orderRequestData)
+
+        if orderSerializer.is_valid():
+            orderSerializer.save()
+            return Response(orderSerializer.data, status=status.HTTP_201_CREATED)
+        return Response(orderSerializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+# auth customer view a order, delete a order
+class AuthCustomerMenuDetailAPIView(APIView):
+    """
+    API endpoint that allows authorized customer get a food order and delete a food order.
+    """
+
+    def get(self, request, order_id):
+        """
+        API method that allows customer to view a food order.
+        """
+
+        # Authenticate/Authorize user
+
+        userPayload = userAuthProcess(request, 'customer')
+
+        if userPayload['error']:
+            return Response({'message': userPayload['error']['message']
+                             }, status=userPayload['error']['status'])
+
+        try:
+            order = Order.objects.get(
+                customerId=userPayload['user_id'], id=order_id)
+        except Order.DoesNotExist:
+            return Response(status=status.HTTP_404_NOT_FOUND)
+
+        orderSerializer = OrderSerializer(order)
+        return Response(orderSerializer.data)
+
+    def delete(self, request, order_id):
+        """
+        API method that allows a new food order to be created.
+        """
+
+        # Authenticate/Authorize user
+
+        userPayload = userAuthProcess(request, 'customer')
+
+        if userPayload['error']:
+            return Response({'message': userPayload['error']['message']
+                             }, status=userPayload['error']['status'])
+
+        # Get the required food order
+
+        try:
+            order = Order.objects.get(
+                customerId=userPayload['user_id'], id=order_id)
+        except Order.DoesNotExist:
+            return Response(status=status.HTTP_403_FORBIDDEN)
+
+        # Cancel the food order
+
+        order.delete()
+        return Response({'message': 'Successfully deleted'}, status=status.HTTP_200_OK)
+
+
+#########################################################################################
+# OTHER USEFUL VIEWS
+#########################################################################################
+
+
+# get-all-menu
 class MenuAPIView(APIView):
     """
-    API endpoint that allows menus to be viewed or created.
+    API endpoint that allows all food menu to be viewed.
     """
 
     def get(self, request):
         """
-        Endpoint method that allows all menus to be viewed.
+        Function that gets all food menu.
         """
-        menus = Menu.objects.all()
-        serializer = MenuSerializer(menus, many=True)
-        return Response(serializer.data)
 
-    def post(self, request):
-        """
-        Endpoint method that allows a new menu to be created.
-        """
-        serializer = MenuSerializer(data=request.data)
-
-        if serializer.is_valid():
-            serializer.save()
-            return Response(serializer.data, status=status.HTTP_201_CREATED)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        menu = Menu.objects.all()
+        menuSerializer = MenuSerializer(menu, many=True)
+        return Response(menuSerializer.data)
 
 
-class TargetMenuAPIView(APIView):
+# get-all-menu-from-a-vendor
+class VendorMenuAPIView(APIView):
     """
-    API endpoint that allows a menu to be viewed or edited.
+    API endpoint that publicly allows all food menu of a vendor to be viewed.
     """
 
-    def get(self, request, id):
+    def get(self, request, vendor_id):
         """
-        Endpoint method that gets a database row by id.
+        Function that gets all menu by vendor id.
         """
-        userType = getSingularDataObject(Menu, id)
-        serializer = MenuSerializer(userType)
-        return Response(serializer.data)
+
+        try:
+            menu = Menu.objects.get(vendorId=vendor_id)
+        except Menu.DoesNotExist:
+            return Response(status=status.HTTP_404_NOT_FOUND)
+
+        menuSerializer = MenuSerializer(menu, many=True)
+        return Response(menuSerializer.data)
 
 
-class OrderAPIView(APIView):
+# get-a-menu
+class MenuDetailAPIView(APIView):
     """
-    API endpoint that allows orders to be viewed or created.
-    """
-
-    def get(self, request):
-        """
-        Endpoint method that allows all orders to be viewed.
-        """
-        orders = Order.objects.all()
-        serializer = OrderSerializer(orders, many=True)
-        return Response(serializer.data)
-
-    def post(self, request):
-        """
-        Endpoint method that allows a new order to be created.
-        """
-        serializer = OrderSerializer(data=request.data)
-
-        if serializer.is_valid():
-            serializer.save()
-            return Response(serializer.data, status=status.HTTP_201_CREATED)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-
-class TargetOrderAPIView(APIView):
-    """
-    API endpoint that allows an order to be viewed or edited.
+    API endpoint that allows a specific food menu to be viewed.
     """
 
-    def get(self, request, id):
+    def get(self, request, menu_id):
         """
-        Endpoint method that gets a database row by id.
+        Function that gets menu by id.
         """
-        userType = getSingularDataObject(Order, id)
-        serializer = OrderSerializer(userType)
-        return Response(serializer.data)
+
+        menu = getDataById(Menu, menu_id, MenuSerializer)
+
+        if menu == None:
+            return Response(status=status.HTTP_404_NOT_FOUND)
+        return Response(menu.data)
 
 
-class OrderStatusAPIView(APIView):
+# get-a-vendor
+class VendorDetailAPIView(APIView):
     """
-    API endpoint that allows order statuses to be viewed or created.
-    """
-
-    def get(self, request):
-        """
-        Endpoint method that allows all order statuses to be viewed.
-        """
-        orderStatuses = OrderStatus.objects.all()
-        serializer = OrderStatusSerializer(orderStatuses, many=True)
-        return Response(serializer.data)
-
-
-class NotificationAPIView(APIView):
-    """
-    API endpoint that allows notifications to be viewed or created.
+    API endpoint that allows a vendor to be viewed.
     """
 
-    def get(self, request):
+    def get(self, request, vendor_id):
         """
-        Endpoint method that allows all notifications to be viewed.
+        API method that gets a database row by id.
         """
-        notifications = Notification.objects.all()
-        serializer = NotificationSerializer(notifications, many=True)
-        return Response(serializer.data)
 
-    def post(self, request):
-        """
-        Endpoint method that allows a new notification to be created.
-        """
-        serializer = NotificationSerializer(data=request.data)
+        vendor = getDataById(Vendor, vendor_id, VendorSerializer)
 
-        if serializer.is_valid():
-            serializer.save()
-            return Response(serializer.data, status=status.HTTP_201_CREATED)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-
-class TargetNotificationAPIView(APIView):
-    """
-    API endpoint that allows a notification to be viewed or edited.
-    """
-
-    def get(self, request, id):
-        """
-        Endpoint method that gets a database row by id.
-        """
-        userType = getSingularDataObject(Notification, id)
-        serializer = NotificationSerializer(userType)
-        return Response(serializer.data)
-
-
-class MessageStatusAPIView(APIView):
-    """
-    API endpoint that allows message statuses to be viewed or created.
-    """
-
-    def get(self, request):
-        """
-        Endpoint method that allows all message statuses to be viewed.
-        """
-        messageStatuses = MessageStatus.objects.all()
-        serializer = MessageStatusSerializer(messageStatuses, many=True)
-        return Response(serializer.data)
+        if vendor == None:
+            return Response(status=status.HTTP_404_NOT_FOUND)
+        return Response(vendor.data)
