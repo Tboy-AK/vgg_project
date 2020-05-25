@@ -5,14 +5,37 @@ from rest_framework import status
 import jwt
 from rest_framework_jwt.settings import api_settings
 from rest_framework_jwt.authentication import JSONWebTokenAuthentication
-import datetime
-from vgg_food_vendor_project.food_vendor_app.models import Auth, Customer, Menu, MessageStatus, Notification, Order, OrderStatus, Vendor
-from vgg_food_vendor_project.food_vendor_app.serializers import AuthSerializer, CustomerSerializer, MenuSerializer, MessageStatusSerializer, NotificationSerializer, OrderSerializer, Order_OrderStatusSerializer, OrderStatusSerializer, VendorSerializer
+from datetime import datetime, timedelta
+import pytz
+from vgg_food_vendor_project.food_vendor_app.models import (
+    Auth,
+    Customer,
+    Menu,
+    MessageStatus,
+    Notification,
+    Order,
+    OrderStatus,
+    Vendor
+)
+from vgg_food_vendor_project.food_vendor_app.serializers import (
+    AuthSerializer,
+    CustomerSerializer,
+    MenuSerializer,
+    MessageStatusSerializer,
+    NotificationSerializer,
+    OrderSerializer,
+    Order_OrderStatusSerializer,
+    OrderStatusSerializer,
+    VendorSerializer
+)
 
 
 #########################################################################################
 # GLOBAL FUNCTIONS DEFINITION
 #########################################################################################
+
+
+app_base_route = getenv('APP_BASE_ROUTE')
 
 
 def getDataById(relationalModel, relationId, modelSerializer):
@@ -35,17 +58,17 @@ def userAuthProcess(request, userType):
 
     # Authenticate user
 
-    accessToken = request.headers['Authorization']
-
-    if not accessToken:
+    if 'Authorization' not in request.headers.keys():
         return {'error': {
-            'message': '', 'status': status.HTTP_403_FORBIDDEN}}
+            'message': 'Log on to {}login to login'.format(app_base_route), 'status': status.HTTP_403_FORBIDDEN}}
+
+    accessToken = request.headers['Authorization']
 
     try:
         userPayload = api_settings.JWT_DECODE_HANDLER(accessToken)
     except:
         return {
-            'error': {'message': 'Log on to {}/login to login'.format(request.META['HTTP_HOST']),
+            'error': {'message': 'Log on to {}login to login'.format(app_base_route),
                       'status': status.HTTP_401_UNAUTHORIZED}
         }
 
@@ -53,21 +76,32 @@ def userAuthProcess(request, userType):
 
     if userPayload['userType'] != userType:
         return {'error': {
-            'message': '', 'status': status.HTTP_403_FORBIDDEN}}
+            'message': 'Only {}s are allowed'.format(userType), 'status': status.HTTP_403_FORBIDDEN}}
 
     return userPayload
 
 
-def filterDataArrayById(dataArray, id):
-    """
-    Function that gets an object from an array by Id.
-    """
+def getDefaultForeignKey(RelatedModel):
+    try:
+        relatedModel = RelatedModel.objects.values_list('id', flat=True)
+    except RelatedModel.DoesNotExist:
+        return {'error': {
+            'message': 'Issue with related data. Contact us at mailto:help@fva.org to rectify this issue.', 'status': status.HTTP_500_INTERNAL_SERVER_ERROR}}
 
-    for dataObject in dataArray:
-        if dataObject['id'] == id:
-            return dataObject
+    listOfPrimaryKeys = list(relatedModel)
+    return listOfPrimaryKeys[0]
 
-    return Response(status=status.HTTP_404_NOT_FOUND)
+
+# def filterDataArrayById(dataArray, id):
+#     """
+#     Function that gets an object from an array by Id.
+#     """
+
+#     for dataObject in dataArray:
+#         if dataObject['id'] == id:
+#             return dataObject
+
+#     return Response(status=status.HTTP_404_NOT_FOUND)
 
 
 #########################################################################################
@@ -87,30 +121,30 @@ class HomeDescAPIView(APIView):
 
         return Response({
             # authentication
-            'login/POST': '{}login/'.format(request.META['HTTP_HOST']),
-            'vendor/GET-POST/': '{}vendor/'.format(request.META['HTTP_HOST']),
-            'customer-signup/POST/': '{}customer/'.format(request.META['HTTP_HOST']),
-            'token/refresh/POST': '{}token/refresh/'.format(request.META['HTTP_HOST']),
+            'login/POST': '{}login/'.format(app_base_route),
+            'vendor/GET-POST/': '{}vendor/'.format(app_base_route),
+            'customer-signup/POST/': '{}customer/'.format(app_base_route),
+            'token/refresh/POST': '{}token/refresh/'.format(app_base_route),
 
             # auth vendor
-            'auth-vendor-menu/GET-POST/': '{}auth/vendor/menu/'.format(request.META['HTTP_HOST']),
-            'auth-vendor-menu/GET-PUT-DELETE/': '{}auth/vendor/menu/1/'.format(request.META['HTTP_HOST']),
-            'auth-vendor-order/GET/': '{}auth/vendor/order/'.format(request.META['HTTP_HOST']),
-            'auth-vendor-order/GET-PATCH/order-status/': '{}auth/vendor/order/1/'.format(request.META['HTTP_HOST']),
-            'auth-vendor-sales/GET/': '{}auth/vendor/sales/'.format(request.META['HTTP_HOST']),
-            'auth-vendor-notification/POST/customer/': '{}auth/vendor/notification/<int:customer_id>/'.format(request.META['HTTP_HOST']),
-            'auth-vendor-notification/GET/': '{}auth/vendor/notification/'.format(request.META['HTTP_HOST']),
+            'auth-vendor-menu/GET-POST/': '{}auth/vendor/menu/'.format(app_base_route),
+            'auth-vendor-menu/GET-PUT-DELETE/': '{}auth/vendor/menu/1/'.format(app_base_route),
+            'auth-vendor-order/GET/': '{}auth/vendor/order/'.format(app_base_route),
+            'auth-vendor-order/GET-PATCH/order-status/': '{}auth/vendor/order/1/'.format(app_base_route),
+            'auth-vendor-sales/GET/': '{}auth/vendor/sales/'.format(app_base_route),
+            'auth-vendor-notification/POST/customer/': '{}auth/vendor/notification/<int:customer_id>/'.format(app_base_route),
+            'auth-vendor-notification/GET/': '{}auth/vendor/notification/'.format(app_base_route),
 
             # public
-            'get-all-menus/GET/': '{}menu/'.format(request.META['HTTP_HOST']),
-            'get-all-menu-by-a-vendor/GET/': '{}vendor/1/menu/'.format(request.META['HTTP_HOST']),
-            'get-a-menu/GET/': '{}menu/1/'.format(request.META['HTTP_HOST']),
+            'get-all-menus/GET/': '{}menu/'.format(app_base_route),
+            'get-all-menu-by-a-vendor/GET/': '{}vendor/1/menu/'.format(app_base_route),
+            'get-a-menu/GET/': '{}menu/1/'.format(app_base_route),
 
             # auth customer
-            'auth-customer-order/GET-POST/': '{}auth/customer/order/'.format(request.META['HTTP_HOST']),
-            'notification/GET/': '{}auth/customer/notification/'.format(request.META['HTTP_HOST']),
+            'auth-customer-order/GET-POST/': '{}auth/customer/order/'.format(app_base_route),
+            'notification/GET/': '{}auth/customer/notification/'.format(app_base_route),
 
-            'get-a-vendor/': '{}vendor/1/'.format(request.META['HTTP_HOST']),
+            'get-a-vendor/': '{}vendor/1/'.format(app_base_route),
         })
 
 
@@ -145,7 +179,7 @@ class LoginAPIView(APIView):
                 email=request.data['email'])
         except Auth.DoesNotExist:
             return Response({
-                'message': 'You are not registered on this FVA app. Log on to {}vendor/ to sign up as a vendor or {}customer/ to sign up as customer'.format(request.META['HTTP_HOST'])
+                'message': 'You are not registered on this FVA app. Log on to {}vendor/ to sign up as a vendor or {}customer/ to sign up as customer'.format(app_base_route)
             }, status=status.HTTP_401_UNAUTHORIZED)
 
         # authenticate user
@@ -177,14 +211,14 @@ class LoginAPIView(APIView):
 
         if vendor == None and customer == None:
             return Response({
-                'message': 'No user profile matching this user. Contact us at help@fva.org to rectify this issue.'
+                'message': 'No user profile matching this user. Contact us at mailto:help@fva.org to rectify this issue.'
             }, status=status.HTTP_404_NOT_FOUND)
 
         if vendor == None:
             customerSerializer = CustomerSerializer(customer)
             accessToken = self.generateToken(customerSerializer, 'customer')
             return Response(
-                {'lastLogin': str(datetime.datetime.utcnow()),
+                {'lastLogin': str(datetime.now()),
                  'data': customerSerializer.data},
                 headers={
                     'Authorization': accessToken
@@ -194,14 +228,14 @@ class LoginAPIView(APIView):
             vendorSerializer = VendorSerializer(vendor)
             accessToken = self.generateToken(vendorSerializer, 'vendor')
             return Response(
-                {'lastLogin': str(datetime.datetime.utcnow()),
+                {'lastLogin': str(datetime.utcnow()),
                  'data': vendorSerializer.data},
                 headers={
                     'Authorization': accessToken
                 })
 
         return Response({
-            'message': 'Conflicting user profile. Contact us at help@fva.org to rectify this issue.'
+            'message': 'Conflicting user profile. Contact us at mailto:help@fva.org to rectify this issue.'
         }, status=status.HTTP_422_UNPROCESSABLE_ENTITY)
 
 
@@ -282,24 +316,24 @@ class CustomerAPIView(APIView):
 # auth vendor view menu, create menu
 class AuthVendorMenuAPIView(APIView):
     """
-    API endpoint that allows vendor to create a food menu and view all authorized food menu.
+    API endpoint that allows authorized vendor to create a food menu and view all his food menu.
     """
 
     def get(self, request):
         """
-        API method that allows vendor to view all food menu.
+        API method that allows vendor to view all his food menu.
         """
 
         # Authenticate/Authorize user
 
         userPayload = userAuthProcess(request, 'vendor')
 
-        if userPayload['error']:
+        if 'error' in userPayload.keys():
             return Response({'message': userPayload['error']['message']
                              }, status=userPayload['error']['status'])
 
         try:
-            menu = Menu.objects.get(vendorId=userPayload['user_id'])
+            menu = Menu.objects.filter(vendorId=userPayload['user_id'])
         except Menu.DoesNotExist:
             return Response({'message': 'You have not created any food menu recently'}, status=status.HTTP_204_NO_CONTENT)
 
@@ -315,7 +349,7 @@ class AuthVendorMenuAPIView(APIView):
 
         userPayload = userAuthProcess(request, 'vendor')
 
-        if userPayload['error']:
+        if 'error' in userPayload.keys():
             return Response({'message': userPayload['error']['message']
                              }, status=userPayload['error']['status'])
 
@@ -329,10 +363,14 @@ class AuthVendorMenuAPIView(APIView):
             return Response({'message': 'Frequency of re-occurrence must be nil if menu does not re-occur'
                              }, status=status.HTTP_400_BAD_REQUEST)
 
-        # Create the food menu
-
         menuRequestData = {**request.data}
         menuRequestData['vendorId'] = userPayload['user_id']
+
+        for k in menuRequestData.keys():
+            if k in ['id', 'dateTimeCreated']:
+                menuRequestData.pop(k)
+
+        # Create the food menu
 
         menuSerializer = MenuSerializer(data=menuRequestData)
 
@@ -345,19 +383,19 @@ class AuthVendorMenuAPIView(APIView):
 # auth vendor view a menu, update a menu, delete a menu
 class AuthVendorMenuDetailAPIView(APIView):
     """
-    API endpoint that allows vendor to create a food menu and view all authorized food menu.
+    API endpoint that allows authorized vendor to create a food menu and view a food menu.
     """
 
     def get(self, request, menu_id):
         """
-        API method that allows vendor to view all food menu.
+        API method that allows authorized vendor to view a food menu.
         """
 
         # Authenticate/Authorize user
 
         userPayload = userAuthProcess(request, 'vendor')
 
-        if userPayload['error']:
+        if 'error' in userPayload.keys():
             return Response({'message': userPayload['error']['message']
                              }, status=userPayload['error']['status'])
 
@@ -372,14 +410,14 @@ class AuthVendorMenuDetailAPIView(APIView):
 
     def put(self, request, menu_id):
         """
-        API method that allows a new food menu to be created.
+        API method that allows vendor update food menu.
         """
 
         # Authenticate/Authorize user
 
         userPayload = userAuthProcess(request, 'vendor')
 
-        if userPayload['error']:
+        if 'error' in userPayload.keys():
             return Response({'message': userPayload['error']['message']
                              }, status=userPayload['error']['status'])
 
@@ -395,8 +433,8 @@ class AuthVendorMenuDetailAPIView(APIView):
 
         menuRequestData = {**request.data}
 
-        for k in menuRequestData.items():
-            if k in ['id', 'dateTimeCreated', 'vendorId']:
+        for k in menuRequestData.keys():
+            if k in ['id', 'dateTimeCreated']:
                 menuRequestData.pop(k)
 
         # Get the required menu
@@ -409,7 +447,7 @@ class AuthVendorMenuDetailAPIView(APIView):
 
         # Update the food menu
 
-        menuSerializer = MenuSerializer(menu, menuRequestData)
+        menuSerializer = MenuSerializer(menu, menuRequestData, partial=True)
 
         if menuSerializer.is_valid():
             menuSerializer.save()
@@ -425,7 +463,7 @@ class AuthVendorMenuDetailAPIView(APIView):
 
         userPayload = userAuthProcess(request, 'vendor')
 
-        if userPayload['error']:
+        if 'error' in userPayload.keys():
             return Response({'message': userPayload['error']['message']
                              }, status=userPayload['error']['status'])
 
@@ -435,7 +473,7 @@ class AuthVendorMenuDetailAPIView(APIView):
             menu = Menu.objects.get(
                 vendorId=userPayload['user_id'], id=menu_id)
         except Menu.DoesNotExist:
-            return Response(status=status.HTTP_403_FORBIDDEN)
+            return Response(status=status.HTTP_404_NOT_FOUND)
 
         # Delete the food menu
 
@@ -446,28 +484,28 @@ class AuthVendorMenuDetailAPIView(APIView):
 # auth vendor view orders
 class AuthVendorOrderAPIView(APIView):
     """
-    API endpoint that allows authorized vendors view all authorized food order.
+    API endpoint that allows authorized vendor view all his food orders.
     """
 
     def get(self, request):
         """
-        API method that allows customer to view all food orders.
+        API method that allows authorized vendor to view all his food orders.
         """
 
         # Authenticate/Authorize user
 
         userPayload = userAuthProcess(request, 'vendor')
 
-        if userPayload['error']:
+        if 'error' in userPayload.keys():
             return Response({'message': userPayload['error']['message']
                              }, status=userPayload['error']['status'])
 
         # check for vendors orders
 
         try:
-            order = Order.objects.get(vendorId=userPayload['user_id'])
+            order = Order.objects.filter(vendorId=userPayload['user_id'])
         except Order.DoesNotExist:
-            return Response({'message': 'No orders have been made to you in a while'}, status=status.HTTP_204_NO_CONTENT)
+            return Response({'message': 'No orders have been made to you in a while'}, status=status.HTTP_404_NOT_FOUND)
 
         orderSerializer = OrderSerializer(order, many=True)
         return Response(orderSerializer.data)
@@ -476,7 +514,7 @@ class AuthVendorOrderAPIView(APIView):
 # auth vendor view an order, update order status
 class AuthVendorOrderDetailAPIView(APIView):
     """
-    API endpoint that allows vendor to create a food menu and view all authorized food menu.
+    API endpoint that allows vendor to create a food menu and view a food menu.
     """
 
     def get(self, request, order_id):
@@ -488,7 +526,7 @@ class AuthVendorOrderDetailAPIView(APIView):
 
         userPayload = userAuthProcess(request, 'vendor')
 
-        if userPayload['error']:
+        if 'error' in userPayload.keys():
             return Response({'message': userPayload['error']['message']
                              }, status=userPayload['error']['status'])
 
@@ -496,12 +534,12 @@ class AuthVendorOrderDetailAPIView(APIView):
             order = Order.objects.get(
                 vendorId=userPayload['user_id'], id=order_id)
         except Order.DoesNotExist:
-            return Response(status=status.HTTP_404_NOT_FOUND)
+            return Response({'message': 'Order not found for user'}, status=status.HTTP_404_NOT_FOUND)
 
         orderSerializer = OrderSerializer(order)
         return Response(orderSerializer.data)
 
-    def put(self, request, order_id):
+    def patch(self, request, order_id):
         """
         API method that allows a new food order to be created.
         """
@@ -510,7 +548,7 @@ class AuthVendorOrderDetailAPIView(APIView):
 
         userPayload = userAuthProcess(request, 'vendor')
 
-        if userPayload['error']:
+        if 'error' in userPayload.keys():
             return Response({'message': userPayload['error']['message']
                              }, status=userPayload['error']['status'])
 
@@ -520,26 +558,51 @@ class AuthVendorOrderDetailAPIView(APIView):
             order = Order.objects.get(
                 vendorId=userPayload['user_id'], id=order_id)
         except Order.DoesNotExist:
-            return Response(status=status.HTTP_404_NOT_FOUND)
+            return Response({'message': 'Order not found for user'}, status=status.HTTP_404_NOT_FOUND)
 
         # check that order status exists in database
 
         try:
             orderStatus = OrderStatus.objects.get(
-                name=request.data['orderStatus'])
-        except OrderStatus.DoesNotExist:
+                id=request.data['orderStatus'])
+        except:
             return Response({'message': 'Invalid order status'}, status=status.HTTP_404_NOT_FOUND)
 
-        orderStatusIdData = {'orderStatusId': orderStatus['id']}
+        orderStatusSerializer = OrderStatusSerializer(orderStatus)
 
-        # Update the food order
+        orderStatusIdData = {'orderStatusId': orderStatusSerializer.data['id']}
 
-        orderSerializer = OrderSerializer(order, orderStatusIdData)
+        # Update the food order status
+
+        orderSerializer = OrderSerializer(
+            order, orderStatusIdData, partial=True)
 
         if orderSerializer.is_valid():
             orderSerializer.save()
             return Response(orderSerializer.data, status=status.HTTP_200_OK)
         return Response(orderSerializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+# auth vendor view an order, update order status
+class AuthVendorSalesReportAPIView(APIView):
+    """
+    API endpoint that allows authorized vendor view daily sales report.
+    """
+
+    def get(self, request):
+        """
+        API method that allows authorized vendor to view all his food orders.
+        """
+
+        # Authenticate/Authorize user
+
+        userPayload = userAuthProcess(request, 'vendor')
+
+        if 'error' in userPayload.keys():
+            return Response({'message': userPayload['error']['message']
+                             }, status=userPayload['error']['status'])
+
+        return Response()
 
 
 #########################################################################################
@@ -550,24 +613,24 @@ class AuthVendorOrderDetailAPIView(APIView):
 # auth customer view orders, create order
 class AuthCustomerOrderAPIView(APIView):
     """
-    API endpoint that allows customer to create a food order and view all authorized food order.
+    API endpoint that allows auhtorized customer to create a food order and view all his food order.
     """
 
     def get(self, request):
         """
-        API method that allows customer to view all food orders.
+        API method that allows authorized customer to view all his food orders.
         """
 
         # Authenticate/Authorize user
 
         userPayload = userAuthProcess(request, 'customer')
 
-        if userPayload['error']:
+        if 'error' in userPayload.keys():
             return Response({'message': userPayload['error']['message']
                              }, status=userPayload['error']['status'])
 
         try:
-            order = Order.objects.get(customerId=userPayload['user_id'])
+            order = Order.objects.filter(customerId=userPayload['user_id'])
         except Order.DoesNotExist:
             return Response({'message': 'You have not made any order recently'}, status=status.HTTP_204_NO_CONTENT)
 
@@ -576,21 +639,100 @@ class AuthCustomerOrderAPIView(APIView):
 
     def post(self, request):
         """
-        API method that allows a new food order to be created.
+        API method that allows customer create a new food order from available food menu.
+        Customer can preoroder with the preorder date
         """
 
         # Authenticate/Authorize user
 
         userPayload = userAuthProcess(request, 'customer')
 
-        if userPayload['error']:
+        if 'error' in userPayload.keys():
             return Response({'message': userPayload['error']['message']
                              }, status=userPayload['error']['status'])
 
-        # Create the food order
+        # validate user input
 
         orderRequestData = {**request.data}
+
+        for k in orderRequestData.keys():
+            if k in ['id', 'dateAndTimeOfOrder']:
+                orderRequestData.pop(k)
+
+        if 'description' in orderRequestData.keys() and len(orderRequestData['description']) < 5:
+            orderRequestData.pop('description')
+
+        if 'preOrderDateTime' in orderRequestData.keys():
+            if len(orderRequestData['preOrderDateTime']) == 0:
+                orderRequestData.pop('preOrderDateTime')
+            elif len(orderRequestData['preOrderDateTime']) < 13:
+                return Response({'message': 'Wrong date/time format. yyyy-mm-dd-hh'}, status.HTTP_400_BAD_REQUEST)
+
         orderRequestData['customerId'] = userPayload['user_id']
+
+        # Check for order status
+
+        orderStatusId = getDefaultForeignKey(OrderStatus)
+
+        try:
+            if orderStatusId['error']:
+                return Response({'message': orderStatusId['error']['message']
+                                 }, status=orderStatusId['error']['status'])
+        except:
+            pass
+
+        orderRequestData['orderStatusId'] = orderStatusId
+
+        # check that menu exists
+
+        amountDue = 0
+
+        for menuId in orderRequestData['itemsOrdered']:
+            try:
+                menu = Menu.objects.get(
+                    vendorId=orderRequestData['vendorId'], id=menuId)
+            except Menu.DoesNotExist:
+                return Response({'message': 'The selected menu ({}) is not available for order'.format(menuId)}, status.HTTP_404_NOT_FOUND)
+
+            menuSerializer = MenuSerializer(menu)
+            amountDue += menuSerializer.data['price']
+
+        orderRequestData['amountDue'] = amountDue
+        orderRequestData['amountOutstanding'] = amountDue
+
+        # handle pre-orders
+
+        if 'preOrderDateTime' in orderRequestData.keys():
+            try:
+                year, month, day, hour = orderRequestData['preOrderDateTime'].split(
+                    '-')
+            except:
+                return Response({'message': 'Wrong date/time format. yyyy-mm-dd-hh'}, status.HTTP_400_BAD_REQUEST)
+
+            try:
+                year = int(year)
+                month = int(month)
+                day = int(day)
+                hour = int(hour)
+            except:
+                return Response({'message': 'Wrong date/time format. yyyy-mm-dd-hh'}, status.HTTP_400_BAD_REQUEST)
+
+            # currentDate = datetime.now()
+
+            # if (year < currentDate.year) or (year == currentDate.year and month < currentDate.month) or (year == currentDate.year and month == currentDate.month and day < currentDate.day):
+            #     return Response({'message': 'Time has passed'}, status.HTTP_400_BAD_REQUEST)
+            # if :
+            #     return Response({'message': 'Time has passed'}, status.HTTP_400_BAD_REQUEST)
+
+            orderRequestData['preOrderDateTime'] = datetime(
+                year=year, month=month, day=day, hour=hour).astimezone(tz=pytz.utc)
+
+            currentDateTime = datetime.utcnow().astimezone(tz=pytz.utc)
+
+            if (orderRequestData['preOrderDateTime'] - currentDateTime).days < 1 or (orderRequestData['preOrderDateTime'] - currentDateTime).days > 5:
+                return Response({'message': 'Unprocessable pre-order date. Pre-order must take place a day and not more than 5 days after the current date'}, status.HTTP_400_BAD_REQUEST)
+
+        # Create the food order
 
         orderSerializer = OrderSerializer(data=orderRequestData)
 
@@ -600,10 +742,10 @@ class AuthCustomerOrderAPIView(APIView):
         return Response(orderSerializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
-# auth customer view a order, delete a order
-class AuthCustomerMenuDetailAPIView(APIView):
+# auth customer view an order, delete (cancel) an order
+class AuthCustomerOrderDetailAPIView(APIView):
     """
-    API endpoint that allows authorized customer get a food order and delete a food order.
+    API endpoint that allows authorized customer view a food order and delete (cancel) a food order.
     """
 
     def get(self, request, order_id):
@@ -615,7 +757,7 @@ class AuthCustomerMenuDetailAPIView(APIView):
 
         userPayload = userAuthProcess(request, 'customer')
 
-        if userPayload['error']:
+        if 'error' in userPayload.keys():
             return Response({'message': userPayload['error']['message']
                              }, status=userPayload['error']['status'])
 
@@ -623,7 +765,7 @@ class AuthCustomerMenuDetailAPIView(APIView):
             order = Order.objects.get(
                 customerId=userPayload['user_id'], id=order_id)
         except Order.DoesNotExist:
-            return Response(status=status.HTTP_404_NOT_FOUND)
+            return Response({'message': 'Order not found for user'}, status=status.HTTP_404_NOT_FOUND)
 
         orderSerializer = OrderSerializer(order)
         return Response(orderSerializer.data)
@@ -637,7 +779,7 @@ class AuthCustomerMenuDetailAPIView(APIView):
 
         userPayload = userAuthProcess(request, 'customer')
 
-        if userPayload['error']:
+        if 'error' in userPayload.keys():
             return Response({'message': userPayload['error']['message']
                              }, status=userPayload['error']['status'])
 
@@ -647,12 +789,73 @@ class AuthCustomerMenuDetailAPIView(APIView):
             order = Order.objects.get(
                 customerId=userPayload['user_id'], id=order_id)
         except Order.DoesNotExist:
-            return Response(status=status.HTTP_403_FORBIDDEN)
+            return Response({'message': 'Order not found for user'}, status=status.HTTP_404_NOT_FOUND)
+
+        # validate status to cancel order
+
+        orderSerializer = OrderSerializer(order)
+
+        if orderSerializer.data['orderStatusId'] > 2:
+            return Response({'message': 'Processed order cannot be cancelled'}, status.HTTP_400_BAD_REQUEST)
 
         # Cancel the food order
 
         order.delete()
         return Response({'message': 'Successfully deleted'}, status=status.HTTP_200_OK)
+
+
+# auth customer view an order, delete (cancel) an order
+class AuthCustomerOrderPaymentAPIView(APIView):
+    """
+    API endpoint that allows authorized customer pay for a food order.
+    """
+
+    def patch(self, request, order_id):
+        """
+        API method that allows authorized customer pay for a food order.
+        """
+
+        # Authenticate/Authorize user
+
+        userPayload = userAuthProcess(request, 'customer')
+
+        if 'error' in userPayload.keys():
+            return Response({'message': userPayload['error']['message']
+                             }, status=userPayload['error']['status'])
+
+        # validate user input
+
+        if 'amountPaid' not in request.data.keys() or type(request.data['amountPaid']) not in [int, float] or request.data['amountPaid'] <= 0:
+            return Response({'message': 'Invalid data type. Amount must be a positive non-zero number'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Get the required order
+
+        try:
+            order = Order.objects.get(
+                customerId=userPayload['user_id'], id=order_id)
+        except Order.DoesNotExist:
+            return Response({'message': 'Order not found for user'}, status=status.HTTP_404_NOT_FOUND)
+
+        # process payment
+
+        orderRequestData = {}
+        amountPaid = request.data['amountPaid']
+        orderRequestData['amountPaid'] = amountPaid
+        orderSerializer = OrderSerializer(order)
+        amountDue = orderSerializer.data['amountDue']
+        amountOutstanding = orderSerializer.data['amountOutstanding']
+        amountOutstanding = amountDue - amountPaid
+        orderRequestData['amountOutstanding'] = amountOutstanding
+
+        # Update the food order amount paid and amount outstanding
+
+        orderSerializer = OrderSerializer(
+            order, orderRequestData, partial=True)
+
+        if orderSerializer.is_valid():
+            orderSerializer.save()
+            return Response(orderSerializer.data, status=status.HTTP_200_OK)
+        return Response(orderSerializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
 #########################################################################################
@@ -688,7 +891,7 @@ class VendorMenuAPIView(APIView):
         """
 
         try:
-            menu = Menu.objects.get(vendorId=vendor_id)
+            menu = Menu.objects.filter(vendorId=vendor_id)
         except Menu.DoesNotExist:
             return Response(status=status.HTTP_404_NOT_FOUND)
 

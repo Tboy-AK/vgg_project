@@ -34,7 +34,7 @@ class OrderSerializer(serializers.ModelSerializer):
     class Meta:
         model = inAppModels.Order
         fields = ['id', 'customerId', 'vendorId', 'description', 'itemsOrdered', 'amountDue',
-                  'amountPaid', 'amountOutstanding', 'orderStatusId', 'menuId', 'dateAndTimeOfOrder', 'preOrderDateTime']
+                  'amountPaid', 'amountOutstanding', 'orderStatusId', 'dateAndTimeOfOrder', 'preOrderDateTime']
 
 
 class Order_OrderStatusSerializer(serializers.ModelSerializer):

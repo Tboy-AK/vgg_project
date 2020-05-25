@@ -70,15 +70,15 @@ class Order(models.Model):
 
     vendorId = models.ForeignKey("Vendor", on_delete=models.CASCADE)
 
-    description = models.TextField()
+    description = models.TextField(null=True)
 
     itemsOrdered = ArrayField(base_field=models.IntegerField())
 
-    amountDue = models.CharField(max_length=50)
+    amountDue = models.FloatField()
 
-    amountPaid = models.CharField(max_length=50)
+    amountPaid = models.FloatField(default=0)
 
-    amountOutstanding = models.CharField(max_length=50)
+    amountOutstanding = models.FloatField()
 
     orderStatusId = models.ForeignKey("OrderStatus", on_delete=models.CASCADE)
 
