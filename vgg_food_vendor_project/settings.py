@@ -27,7 +27,7 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SECRET_KEY = 'j+ic2eu)zh!ow44^n)14xtk+5^^=9_8m1nh3dvdns^9m$i0eym'
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = False
 
 ALLOWED_HOSTS = [
     'tboyak-foodvendorapp.herokuapp.com',
