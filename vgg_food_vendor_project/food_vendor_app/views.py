@@ -36,7 +36,13 @@ from vgg_food_vendor_project.food_vendor_app.serializers import (
 #########################################################################################
 
 
+# The base URL for this app
+
+
 app_base_route = getenv('APP_BASE_ROUTE')
+
+
+# Globally accessible functions
 
 
 def getDataById(relationalModel, relationId, modelSerializer):
@@ -93,18 +99,6 @@ def getDefaultForeignKey(RelatedModel):
     return listOfPrimaryKeys[0]
 
 
-# def filterDataArrayById(dataArray, id):
-#     """
-#     Function that gets an object from an array by Id.
-#     """
-
-#     for dataObject in dataArray:
-#         if dataObject['id'] == id:
-#             return dataObject
-
-#     return Response(status=status.HTTP_404_NOT_FOUND)
-
-
 #########################################################################################
 # LANDING VIEW
 #########################################################################################
@@ -155,6 +149,8 @@ class HomeDescAPIView(APIView):
 
 
 # user login
+
+
 class LoginAPIView(APIView):
     """
     API endpoint that allows users to log in.
@@ -241,6 +237,8 @@ class LoginAPIView(APIView):
 
 
 # vendor view, vendor sign up
+
+
 class VendorAPIView(APIView):
     """
     API endpoint that allows vendors to be viewed.
@@ -280,6 +278,8 @@ class VendorAPIView(APIView):
 
 
 # customer-signup
+
+
 class CustomerAPIView(APIView):
     """
     API endpoint that allows a customer to be viewed or edited.
@@ -315,6 +315,8 @@ class CustomerAPIView(APIView):
 
 
 # auth vendor view menu, create menu
+
+
 class AuthVendorMenuAPIView(APIView):
     """
     API endpoint that allows authorized vendor to create a food menu and view all his food menu.
@@ -382,6 +384,8 @@ class AuthVendorMenuAPIView(APIView):
 
 
 # auth vendor view a menu, update a menu, delete a menu
+
+
 class AuthVendorMenuDetailAPIView(APIView):
     """
     API endpoint that allows authorized vendor to create a food menu and view a food menu.
@@ -483,6 +487,8 @@ class AuthVendorMenuDetailAPIView(APIView):
 
 
 # auth vendor view orders
+
+
 class AuthVendorOrderAPIView(APIView):
     """
     API endpoint that allows authorized vendor view all his food orders.
@@ -513,6 +519,8 @@ class AuthVendorOrderAPIView(APIView):
 
 
 # auth vendor view an order, update order status
+
+
 class AuthVendorOrderDetailAPIView(APIView):
     """
     API endpoint that allows vendor to create a food menu and view a food menu.
@@ -585,6 +593,8 @@ class AuthVendorOrderDetailAPIView(APIView):
 
 
 # auth vendor view daily sales report
+
+
 class AuthVendorSalesReportAPIView(APIView):
     """
     API endpoint that allows authorized vendor view daily sales report.
@@ -775,7 +785,9 @@ class VendorNotificationDetailAPIView(APIView):
                 continue
 
             if notification:
+
                 # Notifications grouped by order
+
                 notificationSerializer = NotificationSerializer(notification)
                 notificationResponse.append(notificationSerializer)
 
@@ -792,6 +804,8 @@ class VendorNotificationDetailAPIView(APIView):
 
 
 # auth customer view orders, create order
+
+
 class AuthCustomerOrderAPIView(APIView):
     """
     API endpoint that allows auhtorized customer to create a food order and view all his food order.
@@ -884,35 +898,17 @@ class AuthCustomerOrderAPIView(APIView):
         # handle pre-orders
 
         if 'preOrderDateTime' in orderRequestData.keys():
-            try:
-                year, month, day, hour = orderRequestData['preOrderDateTime'].split(
-                    '-')
-            except:
-                return Response({'message': 'Wrong date/time format. yyyy-mm-dd-hh'}, status.HTTP_400_BAD_REQUEST)
 
             try:
-                year = int(year)
-                month = int(month)
-                day = int(day)
-                hour = int(hour)
+                orderRequestData['preOrderDateTime'] = datetime.strptime(
+                    orderRequestData['preOrderDateTime'], '%Y-%m-%dT%H:%M:%S.%fZ').astimezone(tz=pytz.utc)
             except:
-                return Response({'message': 'Wrong date/time format. yyyy-mm-dd-hh'}, status.HTTP_400_BAD_REQUEST)
-            # datetime.strptime(
-            #                     e['dateAndTimeOfOrder'], '%Y-%m-%dT%H:%M:%S.%fZ').astimezone().day == datetime.utcnow().astimezone().day
-            # currentDate = datetime.now()
-
-            # if (year < currentDate.year) or (year == currentDate.year and month < currentDate.month) or (year == currentDate.year and month == currentDate.month and day < currentDate.day):
-            #     return Response({'message': 'Time has passed'}, status.HTTP_400_BAD_REQUEST)
-            # if :
-            #     return Response({'message': 'Time has passed'}, status.HTTP_400_BAD_REQUEST)
-
-            orderRequestData['preOrderDateTime'] = datetime(
-                year=year, month=month, day=day, hour=hour).astimezone(tz=pytz.utc)
+                return Response({'message': 'Invalid date/time format => yyyy-mm-ddThh:mm:ss.ffffffZ'}, status.HTTP_400_BAD_REQUEST)
 
             currentDateTime = datetime.utcnow().astimezone(tz=pytz.utc)
 
-            if (orderRequestData['preOrderDateTime'] - currentDateTime).days < 1 or (orderRequestData['preOrderDateTime'] - currentDateTime).days > 5:
-                return Response({'message': 'Unacceptable pre-order. Pre-order must take place a day and not more than 5 days after the current date'}, status.HTTP_400_BAD_REQUEST)
+            if (orderRequestData['preOrderDateTime'] - currentDateTime).seconds < 18000 or (orderRequestData['preOrderDateTime'] - currentDateTime).days > 3:
+                return Response({'message': 'Unacceptable pre-order. Pre-order is valid between 5 hours and 3 days after the order is placed'}, status.HTTP_400_BAD_REQUEST)
 
         # Create the food order
 
@@ -925,6 +921,8 @@ class AuthCustomerOrderAPIView(APIView):
 
 
 # auth customer view an order, delete (cancel) an order
+
+
 class AuthCustomerOrderDetailAPIView(APIView):
     """
     API endpoint that allows authorized customer view a food order and delete (cancel) a food order.
@@ -987,6 +985,8 @@ class AuthCustomerOrderDetailAPIView(APIView):
 
 
 # auth customer view an order, delete (cancel) an order
+
+
 class AuthCustomerOrderPaymentAPIView(APIView):
     """
     API endpoint that allows authorized customer pay for a food order.
@@ -1039,6 +1039,8 @@ class AuthCustomerOrderPaymentAPIView(APIView):
 
 
 # auth customer view notifications, notify customer
+
+
 class CustomerNotificationAPIView(APIView):
     """
     API endpoint that allows authorized customer view notifications, notify customer.
@@ -1070,6 +1072,8 @@ class CustomerNotificationAPIView(APIView):
 
 
 # auth customer view notifications
+
+
 class CustomerNotificationDetailAPIView(APIView):
     """
     API endpoint that allows authorized customer view a notification.
@@ -1105,6 +1109,8 @@ class CustomerNotificationDetailAPIView(APIView):
 
 
 # get-all-menu
+
+
 class MenuAPIView(APIView):
     """
     API endpoint that allows all food menu to be viewed.
@@ -1121,6 +1127,8 @@ class MenuAPIView(APIView):
 
 
 # get-all-menu-from-a-vendor
+
+
 class VendorMenuAPIView(APIView):
     """
     API endpoint that publicly allows all food menu of a vendor to be viewed.
@@ -1141,6 +1149,8 @@ class VendorMenuAPIView(APIView):
 
 
 # get-a-menu
+
+
 class MenuDetailAPIView(APIView):
     """
     API endpoint that allows a specific food menu to be viewed.
@@ -1159,6 +1169,8 @@ class MenuDetailAPIView(APIView):
 
 
 # get-a-vendor
+
+
 class VendorDetailAPIView(APIView):
     """
     API endpoint that allows a vendor to be viewed.

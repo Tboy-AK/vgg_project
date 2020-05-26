@@ -2,18 +2,41 @@
 
 An API for food vendors to make transactions and communicate with their customers
 
+Built with [Django REST Framework](https://www.django-rest-framework.org)
 
-## Users
+Hosted on [food-vendor-api.herokuapp.com](https://food-vendor-api.herokuapp.com)
+
+A more detailed documentation for this application can be found [here]()
+
+
+## Major routes
+
+1. *domain*/api/
+2. *domain*/admin/
+
+
+## Admin access
+
+Username: tboyak
+Password: asdf1234!
+
+## Types of Users
 
 - Vendors
 - Customers
+
+
+## Important To Note
+
+- All routes must end with a forward slash "/"
+- Timezones are UTC
 
 
 ## Core Features
 
 - Authentication and authorization
 - Food purchase / pre-order
-- Order management
+- Food order management
 - Notification
 
 
@@ -39,8 +62,3 @@ An API for food vendors to make transactions and communicate with their customer
 - Customer should be able to pre-order food.
 - Customer should be able to cancel order.
 - Payment for food purchased or pre-ordered (No payment integration required. A flip of payment status is sufficient).
-
-
-## To Note
-
-- Timezones are UTC
