@@ -44,15 +44,17 @@ urlpatterns = [
     # vendor generate daily sales report
     path('auth/vendor/sales/', views.AuthVendorSalesReportAPIView.as_view()),
 
-    #     # vendor notify customer
-    #     path('auth/vendor/notification/<int:customer_id>/',
-    #          views.VendorNotifyCustomerAPIView.as_view()),
+    # vendor view all notifications, notify customer
+    path('auth/vendor/notification/',
+         views.VendorNotificationAPIView.as_view()),
 
-    #     # vendor view all notifications
-    #     path('auth/vendor/notification/', views.VendorNotificationAPIView.as_view()),
+    # vendor view a notification
+    path('auth/vendor/notification/<int:notification_id>/',
+         views.VendorNotificationDetailAPIView.as_view()),
 
 
     # public
+
 
     # view all menus
     path('menu/', views.MenuAPIView.as_view()),
@@ -78,13 +80,11 @@ urlpatterns = [
     path('auth/customer/order/payment/<int:order_id>/',
          views.AuthCustomerOrderPaymentAPIView.as_view()),
 
-    #     # customer view all notifications
-    #     path('auth/customer/notification/',
-    #          views.CustomerNotificationAPIView.as_view()),
+    # customer view all notifications
+    path('auth/customer/notification/',
+         views.CustomerNotificationAPIView.as_view()),
 
-
-    #     # secondary features
-
-    #     # general view of a vendor
-    #     path('vendor/<int:vendor_id>/', views.VendorDetailAPIView.as_view()),
+    # customer view a notification
+    path('auth/customer/notification/<int:notification_id>/',
+         views.VendorNotificationDetailAPIView.as_view()),
 ]

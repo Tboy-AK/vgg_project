@@ -7,6 +7,7 @@ from rest_framework_jwt.settings import api_settings
 from rest_framework_jwt.authentication import JSONWebTokenAuthentication
 from datetime import datetime, timedelta
 import pytz
+from django.utils import timezone, timesince
 from vgg_food_vendor_project.food_vendor_app.models import (
     Auth,
     Customer,
@@ -451,7 +452,7 @@ class AuthVendorMenuDetailAPIView(APIView):
 
         if menuSerializer.is_valid():
             menuSerializer.save()
-            return Response(menuSerializer.data, status=status.HTTP_200_OK)
+            return Response(menuSerializer.data)
         return Response(menuSerializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
     def delete(self, request, menu_id):
@@ -579,11 +580,11 @@ class AuthVendorOrderDetailAPIView(APIView):
 
         if orderSerializer.is_valid():
             orderSerializer.save()
-            return Response(orderSerializer.data, status=status.HTTP_200_OK)
+            return Response(orderSerializer.data)
         return Response(orderSerializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
-# auth vendor view an order, update order status
+# auth vendor view daily sales report
 class AuthVendorSalesReportAPIView(APIView):
     """
     API endpoint that allows authorized vendor view daily sales report.
@@ -591,7 +592,7 @@ class AuthVendorSalesReportAPIView(APIView):
 
     def get(self, request):
         """
-        API method that allows authorized vendor to view all his food orders.
+        API method that allows authorized vendor to view daily sales report.
         """
 
         # Authenticate/Authorize user
@@ -602,7 +603,187 @@ class AuthVendorSalesReportAPIView(APIView):
             return Response({'message': userPayload['error']['message']
                              }, status=userPayload['error']['status'])
 
-        return Response()
+        try:
+            orders = Order.objects.filter(
+                vendorId=userPayload['user_id'])
+        except Order.DoesNotExist:
+            return Response(status=status.HTTP_400_BAD_REQUEST)
+
+        orderSerializer = OrderSerializer(orders, many=True)
+
+        dateTimes = []
+
+        for e in orderSerializer.data:
+            if datetime.strptime(
+                    e['dateAndTimeOfOrder'], '%Y-%m-%dT%H:%M:%S.%fZ').astimezone().day == datetime.utcnow().astimezone().day:
+                dateTimes.append(e)
+
+        return Response(dateTimes)
+
+
+# auth vendor view notifications, notify customer
+
+
+class VendorNotificationAPIView(APIView):
+    """
+    API endpoint that allows authorized vendor view notifications, notify customer.
+    """
+
+    def get(self, request):
+        """
+        API method that allows authorized vendor to view notifications.
+        """
+
+        # Authenticate/Authorize user
+
+        userPayload = userAuthProcess(request, 'vendor')
+
+        if 'error' in userPayload.keys():
+            return Response({'message': userPayload['error']['message']
+                             }, status=userPayload['error']['status'])
+
+        # Check for orders associated with vendor
+
+        try:
+            orders = Order.objects.filter(vendorId=userPayload['user_id'])
+        except Order.DoesNotExist:
+            return Response({'message': 'No foodorders for notifications to show'}, status=status.HTTP_400_BAD_REQUEST)
+
+        orderSerializer = OrderSerializer(orders, many=True)
+        response = []
+
+        for e in orderSerializer.data:
+            try:
+                notifications = Notification.objects.filter(orderId=e['id'])
+            except Notification.DoesNotExist:
+                continue
+
+            if notifications:
+                # Notifications sorted grouped by order
+                notificationSerializer = NotificationSerializer(
+                    notifications, many=True)
+                response.extend(notificationSerializer.data)
+
+        if len(response) > 0:
+
+            # Get message statues
+
+            try:
+                messageStatus = MessageStatus.objects.all()
+            except MessageStatus.DoesNotExist:
+                return Response({'message': 'An issue with our message status. Please contact'}, status=status.HTTP_400_BAD_REQUEST)
+
+            messageStatusSerializer = MessageStatusSerializer(
+                messageStatus, many=True)
+            messageStatus = {}
+
+            for e in messageStatusSerializer.data:
+                messageStatus[e['id']] = e['name']
+
+            for e in response:
+                if e['messageStatusId'] in messageStatus.keys():
+                    e['messageStatus'] = messageStatus[e['messageStatusId']]
+                    e.pop('messageStatusId')
+            return Response(response)
+        return Response({'message': 'No notifications to show'}, status=status.HTTP_400_BAD_REQUEST)
+
+    def post(self, request):
+        """
+        API method that allows authorized vendor to send notification to customer.
+        """
+
+        # Authenticate/Authorize user
+
+        userPayload = userAuthProcess(request, 'vendor')
+
+        if 'error' in userPayload.keys():
+            return Response({'message': userPayload['error']['message']
+                             }, status=userPayload['error']['status'])
+
+        notificationRequestData = {**request.data}
+
+        # Validate user input
+
+        try:
+            Order.objects.filter(
+                vendorId=userPayload['user_id'], customerId=notificationRequestData['subjectUser'])
+        except Order.DoesNotExist:
+            return Response({'message': 'No recipient found for the given order'}, status=status.HTTP_404_NOT_FOUND)
+
+        for k in notificationRequestData.keys():
+            if k in ['id', 'dateTimeCreated']:
+                notificationRequestData.pop(k)
+
+        # Get message status name
+
+        try:
+            messageStatus = MessageStatus.objects.get(
+                id=notificationRequestData['messageStatusId'])
+        except MessageStatus.DoesNotExist:
+            return Response({'message': 'Invalid message status'}, status=status.HTTP_400_BAD_REQUEST)
+
+        messageStatuserializer = MessageStatusSerializer(messageStatus)
+
+        # Send notification
+
+        notificationSerializer = NotificationSerializer(
+            data=notificationRequestData)
+
+        if notificationSerializer.is_valid():
+            notificationSerializer.save()
+            response = {**notificationSerializer.data}
+            response.pop('messageStatusId')
+            response['messageStatus'] = messageStatuserializer.data['name']
+            return Response(response, status=status.HTTP_201_CREATED)
+        return Response(notificationSerializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+# auth vendor view notifications, notify customer
+
+
+class VendorNotificationDetailAPIView(APIView):
+    """
+    API endpoint that allows authorized vendor view a notification.
+    """
+
+    def get(self, request, notification_id):
+        """
+        API method that allows authorized vendor to view a notification.
+        """
+
+        # Authenticate/Authorize user
+
+        userPayload = userAuthProcess(request, 'vendor')
+
+        if 'error' in userPayload.keys():
+            return Response({'message': userPayload['error']['message']
+                             }, status=userPayload['error']['status'])
+
+        try:
+            orders = Order.objects.filter(vendorId=userPayload['user_id'])
+        except Order.DoesNotExist:
+            return Response({'message': 'No notifications to show'}, status=status.HTTP_404_NOT_FOUND)
+
+        orderSerializer = NotificationSerializer(orders, many=True)
+        notificationResponse = []
+
+        for k, v in orderSerializer.data.items():
+            try:
+                notification = Notification.objects.get(
+                    orderId=v['id'], id=notification_id)
+            except Notification.DoesNotExist:
+                continue
+
+            if notification:
+                # Notifications grouped by order
+                notificationSerializer = NotificationSerializer(notification)
+                notificationResponse.append(notificationSerializer)
+
+        if len(notificationResponse == 1):
+            return Response(notificationResponse[0])
+        if len(notificationResponse == 0):
+            return Response({'message': 'No notification to show'}, status=status.HTTP_404_NOT_FOUND)
+        return Response({'message': 'Unexpected number of notifications'}, status=status.HTTP_400_BAD_REQUEST)
 
 
 #########################################################################################
@@ -716,7 +897,8 @@ class AuthCustomerOrderAPIView(APIView):
                 hour = int(hour)
             except:
                 return Response({'message': 'Wrong date/time format. yyyy-mm-dd-hh'}, status.HTTP_400_BAD_REQUEST)
-
+            # datetime.strptime(
+            #                     e['dateAndTimeOfOrder'], '%Y-%m-%dT%H:%M:%S.%fZ').astimezone().day == datetime.utcnow().astimezone().day
             # currentDate = datetime.now()
 
             # if (year < currentDate.year) or (year == currentDate.year and month < currentDate.month) or (year == currentDate.year and month == currentDate.month and day < currentDate.day):
@@ -730,7 +912,7 @@ class AuthCustomerOrderAPIView(APIView):
             currentDateTime = datetime.utcnow().astimezone(tz=pytz.utc)
 
             if (orderRequestData['preOrderDateTime'] - currentDateTime).days < 1 or (orderRequestData['preOrderDateTime'] - currentDateTime).days > 5:
-                return Response({'message': 'Unprocessable pre-order date. Pre-order must take place a day and not more than 5 days after the current date'}, status.HTTP_400_BAD_REQUEST)
+                return Response({'message': 'Unacceptable pre-order. Pre-order must take place a day and not more than 5 days after the current date'}, status.HTTP_400_BAD_REQUEST)
 
         # Create the food order
 
@@ -801,7 +983,7 @@ class AuthCustomerOrderDetailAPIView(APIView):
         # Cancel the food order
 
         order.delete()
-        return Response({'message': 'Successfully deleted'}, status=status.HTTP_200_OK)
+        return Response({'message': 'Successfully deleted'}, status=status.HTTP_204_NO_CONTENT)
 
 
 # auth customer view an order, delete (cancel) an order
@@ -838,24 +1020,83 @@ class AuthCustomerOrderPaymentAPIView(APIView):
 
         # process payment
 
-        orderRequestData = {}
-        amountPaid = request.data['amountPaid']
-        orderRequestData['amountPaid'] = amountPaid
         orderSerializer = OrderSerializer(order)
-        amountDue = orderSerializer.data['amountDue']
-        amountOutstanding = orderSerializer.data['amountOutstanding']
-        amountOutstanding = amountDue - amountPaid
-        orderRequestData['amountOutstanding'] = amountOutstanding
+        orderProcessData = {}
+        orderProcessData['amountPaid'] = orderSerializer.data['amountPaid'] + \
+            request.data['amountPaid']
+        orderProcessData['amountOutstanding'] = orderSerializer.data['amountDue'] - \
+            orderProcessData['amountPaid']
 
         # Update the food order amount paid and amount outstanding
 
         orderSerializer = OrderSerializer(
-            order, orderRequestData, partial=True)
+            order, orderProcessData, partial=True)
 
         if orderSerializer.is_valid():
             orderSerializer.save()
-            return Response(orderSerializer.data, status=status.HTTP_200_OK)
+            return Response(orderSerializer.data)
         return Response(orderSerializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+# auth customer view notifications, notify customer
+class CustomerNotificationAPIView(APIView):
+    """
+    API endpoint that allows authorized customer view notifications, notify customer.
+    """
+
+    def get(self, request):
+        """
+        API method that allows authorized customer to view notifications.
+        """
+
+        # Authenticate/Authorize user
+
+        userPayload = userAuthProcess(request, 'customer')
+
+        if 'error' in userPayload.keys():
+            return Response({'message': userPayload['error']['message']
+                             }, status=userPayload['error']['status'])
+
+        try:
+            notifications = Notification.objects.filter(
+                subjectUser=userPayload['user_id'])
+        except Notification.DoesNotExist:
+            return Response({'message': 'No notifications to show'}, status=status.HTTP_400_BAD_REQUEST)
+
+        notificationSerializer = NotificationSerializer(
+            notifications, many=True)
+
+        return Response(notificationSerializer.data)
+
+
+# auth customer view notifications
+class CustomerNotificationDetailAPIView(APIView):
+    """
+    API endpoint that allows authorized customer view a notification.
+    """
+
+    def get(self, request, notification_id):
+        """
+        API method that allows authorized customer to view a notification.
+        """
+
+        # Authenticate/Authorize user
+
+        userPayload = userAuthProcess(request, 'customer')
+
+        if 'error' in userPayload.keys():
+            return Response({'message': userPayload['error']['message']
+                             }, status=userPayload['error']['status'])
+
+        try:
+            notification = Notification.objects.get(
+                subjectUser=userPayload['user_id'], id=notification_id)
+        except Notification.DoesNotExist:
+            return Response({'message': 'No notification to show'}, status=status.HTTP_400_BAD_REQUEST)
+
+        notificationSerializer = NotificationSerializer(notification)
+
+        return Response(notificationSerializer.data)
 
 
 #########################################################################################
