@@ -8,6 +8,7 @@ from rest_framework_jwt.authentication import JSONWebTokenAuthentication
 from datetime import datetime, timedelta
 import pytz
 from django.utils import timezone, timesince
+from django.db.models import F
 from vgg_food_vendor_project.food_vendor_app.models import (
     Auth,
     Customer,
@@ -122,13 +123,13 @@ class HomeDescAPIView(APIView):
             'token/refresh/POST': '{}token/refresh/'.format(app_base_route),
 
             # auth vendor
-            'auth-vendor-menu/GET-POST/': '{}auth/vendor/menu/'.format(app_base_route),
+            'auth-vendor-menus/GET-POST/': '{}auth/vendor/menu/'.format(app_base_route),
             'auth-vendor-menu/GET-PUT-DELETE/': '{}auth/vendor/menu/1/'.format(app_base_route),
-            'auth-vendor-order/GET/': '{}auth/vendor/order/'.format(app_base_route),
+            'auth-vendor-orders/GET/': '{}auth/vendor/order/'.format(app_base_route),
             'auth-vendor-order/GET-PATCH/order-status/': '{}auth/vendor/order/1/'.format(app_base_route),
-            'auth-vendor-sales/GET/': '{}auth/vendor/sales/'.format(app_base_route),
-            'auth-vendor-notification/POST/customer/': '{}auth/vendor/notification/<int:customer_id>/'.format(app_base_route),
-            'auth-vendor-notification/GET/': '{}auth/vendor/notification/'.format(app_base_route),
+            'auth-vendor-sales/GET/': '{}auth/vendor/sales/daily/'.format(app_base_route),
+            'auth-vendor-notifications/GET-POST/customer/': '{}auth/vendor/notification/'.format(app_base_route),
+            'auth-vendor-notification/GET/': '{}auth/vendor/notification/1/'.format(app_base_route),
 
             # public
             'get-all-menus/GET/': '{}menu/'.format(app_base_route),
@@ -136,10 +137,11 @@ class HomeDescAPIView(APIView):
             'get-a-menu/GET/': '{}menu/1/'.format(app_base_route),
 
             # auth customer
-            'auth-customer-order/GET-POST/': '{}auth/customer/order/'.format(app_base_route),
-            'notification/GET/': '{}auth/customer/notification/'.format(app_base_route),
-
-            'get-a-vendor/': '{}vendor/1/'.format(app_base_route),
+            'auth-customer-orders/GET-POST/': '{}auth/customer/order/'.format(app_base_route),
+            'auth-customer-order/GET-DELETE/': '{}auth/customer/order/1'.format(app_base_route),
+            'auth-customer-payment/PATCH/': '{}auth/customer/order/payment/1'.format(app_base_route),
+            'customer-notifications/GET/': '{}auth/customer/notification/'.format(app_base_route),
+            'customer-notification/GET/': '{}auth/customer/notification/1'.format(app_base_route),
         })
 
 
@@ -621,14 +623,32 @@ class AuthVendorSalesReportAPIView(APIView):
 
         orderSerializer = OrderSerializer(orders, many=True)
 
-        dateTimes = []
+        ordersOfTheDay = []
 
         for e in orderSerializer.data:
-            if datetime.strptime(
-                    e['dateAndTimeOfOrder'], '%Y-%m-%dT%H:%M:%S.%fZ').astimezone().day == datetime.utcnow().astimezone().day:
-                dateTimes.append(e)
+            if (datetime.utcnow().astimezone() - datetime.strptime(
+                    e['dateAndTimeOfOrder'], '%Y-%m-%dT%H:%M:%S.%fZ').astimezone(tz=pytz.utc)).days == 0:
+                ordersOfTheDay.append(e)
 
-        return Response(dateTimes)
+        responseData = {'salesList': [],
+                        'totalAmountAtHand': 0,
+                        'totalAmountOutstanding': 0,
+                        'expectedSalesForTheDay': 0,
+                        }
+
+        for e in ordersOfTheDay:
+            salesDetail = {}
+            salesDetail['dateAndTimeOfOrder'] = e['dateAndTimeOfOrder']
+            salesDetail['amountAtHand'] = e['amountPaid']
+            salesDetail['amountOutstanding'] = e['amountOutstanding']
+            salesDetail['customerId'] = e['customerId']
+            salesDetail['orderId'] = e['id']
+            responseData['salesList'].append(salesDetail)
+            responseData['totalAmountAtHand'] += e['amountPaid']
+            responseData['totalAmountOutstanding'] += e['amountOutstanding']
+            responseData['expectedSalesForTheDay'] += e['amountDue']
+
+        return Response(responseData)
 
 
 # auth vendor view notifications, notify customer
@@ -657,7 +677,7 @@ class VendorNotificationAPIView(APIView):
         try:
             orders = Order.objects.filter(vendorId=userPayload['user_id'])
         except Order.DoesNotExist:
-            return Response({'message': 'No foodorders for notifications to show'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'message': 'No food orders to prompt notifications'}, status=status.HTTP_400_BAD_REQUEST)
 
         orderSerializer = OrderSerializer(orders, many=True)
         response = []
@@ -674,28 +694,28 @@ class VendorNotificationAPIView(APIView):
                     notifications, many=True)
                 response.extend(notificationSerializer.data)
 
-        if len(response) > 0:
+        if len(response) == 0:
+            return Response({'message': 'No notifications to show'}, status=status.HTTP_204_NO_CONTENT)
 
-            # Get message statues
+        # Get message statuses
 
-            try:
-                messageStatus = MessageStatus.objects.all()
-            except MessageStatus.DoesNotExist:
-                return Response({'message': 'An issue with our message status. Please contact'}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            messageStatus = MessageStatus.objects.all()
+        except MessageStatus.DoesNotExist:
+            return Response({'message': 'An issue with our message status. Please contact'}, status=status.HTTP_400_BAD_REQUEST)
 
-            messageStatusSerializer = MessageStatusSerializer(
-                messageStatus, many=True)
-            messageStatus = {}
+        messageStatusSerializer = MessageStatusSerializer(
+            messageStatus, many=True)
+        messageStatus = {}
 
-            for e in messageStatusSerializer.data:
-                messageStatus[e['id']] = e['name']
+        for e in messageStatusSerializer.data:
+            messageStatus[e['id']] = e['name']
 
-            for e in response:
-                if e['messageStatusId'] in messageStatus.keys():
-                    e['messageStatus'] = messageStatus[e['messageStatusId']]
-                    e.pop('messageStatusId')
-            return Response(response)
-        return Response({'message': 'No notifications to show'}, status=status.HTTP_400_BAD_REQUEST)
+        for e in response:
+            if e['messageStatusId'] in messageStatus.keys():
+                e['messageStatus'] = messageStatus[e['messageStatusId']]
+                e.pop('messageStatusId')
+        return Response(response)
 
     def post(self, request):
         """
@@ -772,30 +792,34 @@ class VendorNotificationDetailAPIView(APIView):
         try:
             orders = Order.objects.filter(vendorId=userPayload['user_id'])
         except Order.DoesNotExist:
-            return Response({'message': 'No notifications to show'}, status=status.HTTP_404_NOT_FOUND)
+            return Response({'message': 'No food orders to prompt notifications'}, status=status.HTTP_404_NOT_FOUND)
 
-        orderSerializer = NotificationSerializer(orders, many=True)
-        notificationResponse = []
+        orderSerializer = OrderSerializer(orders, many=True)
 
-        for k, v in orderSerializer.data.items():
+        for e in orderSerializer.data:
             try:
                 notification = Notification.objects.get(
-                    orderId=v['id'], id=notification_id)
+                    orderId=e['id'], id=notification_id)
             except Notification.DoesNotExist:
                 continue
 
             if notification:
-
-                # Notifications grouped by order
-
                 notificationSerializer = NotificationSerializer(notification)
-                notificationResponse.append(notificationSerializer)
 
-        if len(notificationResponse == 1):
-            return Response(notificationResponse[0])
-        if len(notificationResponse == 0):
-            return Response({'message': 'No notification to show'}, status=status.HTTP_404_NOT_FOUND)
-        return Response({'message': 'Unexpected number of notifications'}, status=status.HTTP_400_BAD_REQUEST)
+                # Get message statuses
+
+                try:
+                    messageStatus = MessageStatus.objects.get(
+                        id=notificationSerializer.data['messageStatusId'])
+                except MessageStatus.DoesNotExist:
+                    return Response({'message': 'An issue with our message status. Please contact tobia807@gmail.com'}, status=status.HTTP_400_BAD_REQUEST)
+
+                messageStatusSerializer = MessageStatusSerializer(
+                    messageStatus)
+                response = {**notificationSerializer.data}
+                response['messageStatusId'] = messageStatusSerializer.data['name']
+                return Response(response)
+        return Response(status=status.HTTP_404_NOT_FOUND)
 
 
 #########################################################################################
@@ -1068,6 +1092,24 @@ class CustomerNotificationAPIView(APIView):
         notificationSerializer = NotificationSerializer(
             notifications, many=True)
 
+        # Get message statuses
+
+        try:
+            messageStatus = MessageStatus.objects.all()
+        except MessageStatus.DoesNotExist:
+            return Response({'message': 'An issue with our message status. Please contact'}, status=status.HTTP_400_BAD_REQUEST)
+
+        messageStatusSerializer = MessageStatusSerializer(
+            messageStatus, many=True)
+        messageStatus = {}
+
+        for e in messageStatusSerializer.data:
+            messageStatus[e['id']] = e['name']
+
+        for e in notificationSerializer.data:
+            if e['messageStatusId'] in messageStatus.keys():
+                e['messageStatus'] = messageStatus[e['messageStatusId']]
+                e.pop('messageStatusId')
         return Response(notificationSerializer.data)
 
 
@@ -1100,7 +1142,18 @@ class CustomerNotificationDetailAPIView(APIView):
 
         notificationSerializer = NotificationSerializer(notification)
 
-        return Response(notificationSerializer.data)
+        # Get message statuses
+
+        try:
+            messageStatus = MessageStatus.objects.get(
+                id=notificationSerializer.data['messageStatusId'])
+        except MessageStatus.DoesNotExist:
+            return Response({'message': 'An issue with our message status. Please contact tobia807@gmail.com'}, status=status.HTTP_400_BAD_REQUEST)
+
+        messageStatusSerializer = MessageStatusSerializer(messageStatus)
+        response = {**notificationSerializer.data}
+        response['messageStatusId'] = messageStatusSerializer.data['name']
+        return Response(response)
 
 
 #########################################################################################

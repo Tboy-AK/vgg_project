@@ -42,7 +42,7 @@ urlpatterns = [
          views.AuthVendorOrderDetailAPIView.as_view()),
 
     # vendor generate daily sales report
-    path('auth/vendor/sales/', views.AuthVendorSalesReportAPIView.as_view()),
+    path('auth/vendor/sales/daily/', views.AuthVendorSalesReportAPIView.as_view()),
 
     # vendor view all notifications, notify customer
     path('auth/vendor/notification/',
@@ -86,5 +86,5 @@ urlpatterns = [
 
     # customer view a notification
     path('auth/customer/notification/<int:notification_id>/',
-         views.VendorNotificationDetailAPIView.as_view()),
+         views.CustomerNotificationDetailAPIView.as_view()),
 ]

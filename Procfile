@@ -1,0 +1,1 @@
+web: gunicorn vgg_food_vendor_project.wsgi

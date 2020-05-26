@@ -12,6 +12,7 @@ https://docs.djangoproject.com/en/3.0/ref/settings/
 from dotenv import load_dotenv
 import os
 import datetime
+from os import getenv
 
 load_dotenv()
 
@@ -28,7 +29,10 @@ SECRET_KEY = 'j+ic2eu)zh!ow44^n)14xtk+5^^=9_8m1nh3dvdns^9m$i0eym'
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = [
+    'tboyak-foodvendorapp.herokuapp.com',
+    '127.0.0.1',
+]
 
 
 # Application definition
@@ -81,11 +85,11 @@ WSGI_APPLICATION = 'vgg_food_vendor_project.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql_psycopg2',
-        'NAME': 'vgg_food_vendor',
-        'USER': 'tboyak',
-        'PASSWORD': 'asdf1234',
-        'HOST': 'localhost',
-        'PORT': '5432',
+        'NAME': getenv('DB_NAME'),
+        'USER': getenv('DB_USER'),
+        'PASSWORD': getenv('DB_PASSWORD'),
+        'HOST': getenv('DB_HOST'),
+        'PORT': getenv('DB_PORT'),
     }
 }
 
