@@ -1,5 +1,4 @@
 from django.urls import path
-# from rest_framework_jwt.views import ObtainJSONWebToken, RefreshJSONWebToken
 from vgg_food_vendor_project.food_vendor_app import views
 
 

@@ -2,7 +2,6 @@ from os import getenv
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
-import jwt
 from rest_framework_jwt.settings import api_settings
 from datetime import datetime, timedelta
 import pytz
