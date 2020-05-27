@@ -13,7 +13,6 @@ from dotenv import load_dotenv
 import os
 import datetime
 from os import getenv
-
 load_dotenv()
 
 # Build paths inside the project like this: os.path.join(BASE_DIR, ...)
@@ -27,11 +26,11 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SECRET_KEY = 'j+ic2eu)zh!ow44^n)14xtk+5^^=9_8m1nh3dvdns^9m$i0eym'
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = False
+DEBUG = True
 
 ALLOWED_HOSTS = [
-    'tboyak-foodvendorapp.herokuapp.com',
     '127.0.0.1',
+    'tboyak-foodvendorapp.herokuapp.com',
 ]
 
 
@@ -148,12 +147,16 @@ REST_FRAMEWORK = {
     'PAGE_SIZE': 10,
 }
 
+# AUTHENTICATION_BACKENDS = [
+#     'vgg_food_vendor_project.food_vendor_app.models.Auth'
+# ]
+
 JWT_AUTH = {
     'JWT_VERIFY': True,
     'JWT_SECRET_KEY': 'mysecretkeyformysecrettoken',
     'JWT_VERIFY_EXPIRATION': True,
-    'JWT_EXPIRATION_DELTA': datetime.timedelta(seconds=600),
-    'JWT_ALLOW_REFRESH': True,
+    'JWT_EXPIRATION_DELTA': datetime.timedelta(seconds=72000),
+    'JWT_ALLOW_REFRESH': False,
     'JWT_REFRESH_EXPIRATION_DELTA': datetime.timedelta(days=30),
     'JWT_AUTH_HEADER_PREFIX': 'Bearer'
 }

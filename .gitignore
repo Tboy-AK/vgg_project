@@ -1,9 +1,6 @@
 # vscode setup
 .vscode/
 
-# Required custom package
-!vgg_env/Lib/site-packages/rest_framework_jwt/
-
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

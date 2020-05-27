@@ -4,11 +4,8 @@ from rest_framework.response import Response
 from rest_framework import status
 import jwt
 from rest_framework_jwt.settings import api_settings
-from rest_framework_jwt.authentication import JSONWebTokenAuthentication
 from datetime import datetime, timedelta
 import pytz
-from django.utils import timezone, timesince
-from django.db.models import F
 from vgg_food_vendor_project.food_vendor_app.models import (
     Auth,
     Customer,
@@ -66,11 +63,11 @@ def userAuthProcess(request, userType):
 
     # Authenticate user
 
-    if 'Authorization' not in request.headers.keys():
+    if 'FVA-USER' not in request.COOKIES.keys():
         return {'error': {
             'message': 'Log on to {}login to login'.format(app_base_route), 'status': status.HTTP_403_FORBIDDEN}}
 
-    accessToken = request.headers['Authorization']
+    accessToken = request.COOKIES.get('FVA-USER')
 
     try:
         userPayload = api_settings.JWT_DECODE_HANDLER(accessToken)
@@ -82,7 +79,11 @@ def userAuthProcess(request, userType):
 
     # Authorize user
 
-    if userPayload['userType'] != userType:
+    for k, v in userPayload.items():
+        if type(v) == list:
+            userPayload[k] = v[0]
+
+    if userPayload['username'] != userType:
         return {'error': {
             'message': 'Only {}s are allowed'.format(userType), 'status': status.HTTP_403_FORBIDDEN}}
 
@@ -120,7 +121,6 @@ class HomeDescAPIView(APIView):
             'login/POST': '{}login/'.format(app_base_route),
             'vendor/GET-POST/': '{}vendor/'.format(app_base_route),
             'customer-signup/POST/': '{}customer/'.format(app_base_route),
-            'token/refresh/POST': '{}token/refresh/'.format(app_base_route),
 
             # auth vendor
             'auth-vendor-menus/GET-POST/': '{}auth/vendor/menu/'.format(app_base_route),
@@ -158,11 +158,19 @@ class LoginAPIView(APIView):
     API endpoint that allows users to log in.
     """
 
+    class userAuth():
+        def __init__(self, modelSerializer, userType):
+            """
+            An object of essential details user details
+            """
+
+            self.username = userType,
+            self.email = modelSerializer.data['email'],
+            self.pk = modelSerializer.data['id'],
+            self.userType = userType
+
     def generateToken(self, modelSerializer, userType):
-        userObject = {'username': modelSerializer.data['email'],
-                      'pk': modelSerializer.data['id'],
-                      'userType': userType,
-                      }
+        userObject = self.userAuth(modelSerializer, userType)
         tokenPayload = api_settings.JWT_PAYLOAD_HANDLER(userObject)
         return api_settings.JWT_ENCODE_HANDLER(tokenPayload)
 
@@ -220,7 +228,7 @@ class LoginAPIView(APIView):
                 {'lastLogin': str(datetime.now()),
                  'data': customerSerializer.data},
                 headers={
-                    'Authorization': accessToken
+                    'Set-Cookie': 'FVA-USER={}; domain={}; path=/api/auth; max-age=72000'.format(accessToken, getenv('APP_DOMAIN_NAME'))
                 })
 
         if customer == None:
@@ -230,7 +238,7 @@ class LoginAPIView(APIView):
                 {'lastLogin': str(datetime.utcnow()),
                  'data': vendorSerializer.data},
                 headers={
-                    'Authorization': accessToken
+                    'Set-Cookie': 'FVA-USER={}; domain={}; path=/api/auth; max-age=72000'.format(accessToken, getenv('APP_DOMAIN_NAME'))
                 })
 
         return Response({
@@ -615,6 +623,8 @@ class AuthVendorSalesReportAPIView(APIView):
             return Response({'message': userPayload['error']['message']
                              }, status=userPayload['error']['status'])
 
+        # Check through orders to extract vital info for the sales report
+
         try:
             orders = Order.objects.filter(
                 vendorId=userPayload['user_id'])
@@ -625,8 +635,12 @@ class AuthVendorSalesReportAPIView(APIView):
 
         ordersOfTheDay = []
 
+        # Extract only orders for the last 24hrs
+        today = datetime.now()
+        midnight = datetime(today.year, today.month,
+                            today.day, 0, 0, 0, 0, tzinfo=pytz.utc)
         for e in orderSerializer.data:
-            if (datetime.utcnow().astimezone() - datetime.strptime(
+            if (midnight - datetime.strptime(
                     e['dateAndTimeOfOrder'], '%Y-%m-%dT%H:%M:%S.%fZ').astimezone(tz=pytz.utc)).days == 0:
                 ordersOfTheDay.append(e)
 
@@ -702,7 +716,7 @@ class VendorNotificationAPIView(APIView):
         try:
             messageStatus = MessageStatus.objects.all()
         except MessageStatus.DoesNotExist:
-            return Response({'message': 'An issue with our message status. Please contact'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'message': 'An issue with our message status. Please contact tobia807@gmail.com'}, status=status.HTTP_400_BAD_REQUEST)
 
         messageStatusSerializer = MessageStatusSerializer(
             messageStatus, many=True)
@@ -1097,7 +1111,7 @@ class CustomerNotificationAPIView(APIView):
         try:
             messageStatus = MessageStatus.objects.all()
         except MessageStatus.DoesNotExist:
-            return Response({'message': 'An issue with our message status. Please contact'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'message': 'An issue with our message status. Please contact tobia807@gmail.com'}, status=status.HTTP_400_BAD_REQUEST)
 
         messageStatusSerializer = MessageStatusSerializer(
             messageStatus, many=True)

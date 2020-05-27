@@ -1,12 +1,9 @@
 from django.urls import path
-from rest_framework_jwt.views import RefreshJSONWebToken
+# from rest_framework_jwt.views import ObtainJSONWebToken, RefreshJSONWebToken
 from vgg_food_vendor_project.food_vendor_app import views
 
 
 urlpatterns = [
-    # refresh token
-    path('token/refresh/', RefreshJSONWebToken.as_view()),
-
     # homepage
     path('', views.HomeDescAPIView.as_view()),
 
