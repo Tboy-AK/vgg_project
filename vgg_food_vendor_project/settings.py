@@ -13,6 +13,7 @@ from dotenv import load_dotenv
 import os
 import datetime
 from os import getenv
+import dj_database_url
 load_dotenv()
 
 # Build paths inside the project like this: os.path.join(BASE_DIR, ...)
@@ -23,10 +24,10 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # See https://docs.djangoproject.com/en/3.0/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'j+ic2eu)zh!ow44^n)14xtk+5^^=9_8m1nh3dvdns^9m$i0eym'
+SECRET_KEY = getenv('APP_SECRET_KEY')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = getenv('DEBUG_VALUE')
 
 ALLOWED_HOSTS = [
     '127.0.0.1',
@@ -83,16 +84,16 @@ WSGI_APPLICATION = 'vgg_food_vendor_project.wsgi.application'
 # https://docs.djangoproject.com/en/3.0/ref/settings/#databases
 
 DATABASES = {
-    'default': getenv('DATABASE_URL'),
-    'local': {
-        'ENGINE': 'django.db.backends.postgresql_psycopg2',
-        'NAME': getenv('DB_NAME'),
-        'USER': getenv('DB_USER'),
-        'PASSWORD': getenv('DB_PASSWORD'),
-        'HOST': getenv('DB_HOST'),
-        'PORT': getenv('DB_PORT'),
-    },
+    # 'default': {
+    #     'ENGINE': 'django.db.backends.postgresql_psycopg2',
+    #     'NAME': getenv('DB_NAME'),
+    #     'USER': getenv('DB_USER'),
+    #     'PASSWORD': getenv('DB_PASSWORD'),
+    #     'HOST': getenv('DB_HOST'),
+    #     'PORT': getenv('DB_PORT'),
+    # },
 }
+DATABASES['default'] = dj_database_url.config(default=getenv('DATABASE_URL'))
 
 
 # Password validation
