@@ -46,7 +46,7 @@ class Menu(models.Model):
 
     name = models.CharField(max_length=50, unique=True)
 
-    description = models.TextField()
+    description = models.TextField(null=True)
 
     price = models.FloatField()
 
