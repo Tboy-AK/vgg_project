@@ -5,6 +5,14 @@ from rest_framework import status
 from rest_framework_jwt.settings import api_settings
 from datetime import datetime, timedelta
 import pytz
+import bcrypt
+import re as regex
+from phonenumbers import (
+    parse as phoneparse,
+    is_valid_number,
+    format_number as format_phone,
+    PhoneNumberFormat,
+)
 from vgg_food_vendor_project.food_vendor_app.models import (
     Auth,
     Customer,
@@ -42,6 +50,100 @@ app_base_route = getenv('APP_BASE_ROUTE')
 # Globally accessible functions
 
 
+class EnsureRequiredFields():
+    def __init__(self, requiredInputFields=[], requestFields=[]):
+        """
+        Function that checks for required input fields and returns an error dictionary if one is missing
+        """
+
+        for e in requestFields:
+            if e in requiredInputFields:
+                requiredInputFields.pop(requiredInputFields.index(e))
+
+        if len(requiredInputFields) != 0:
+            self.requiredInputFields = requiredInputFields
+            self.error = {'message': 'Required fields missing',
+                          'missing-fields': self.requiredInputFields,
+                          'status': status.HTTP_403_FORBIDDEN}
+
+    def errorResponse(self):
+        """
+        Response to be called in the case of an error.
+        """
+        return Response({'message': self.error['message'],
+                         'missing-fields': self.error['missing-fields'],
+                         }, status=self.error['status'])
+
+
+def protectRestrictedInput(requestData={}):
+    """
+    Function that removes special keys from the initial request dictionary and returns a sanitized request dictioinary
+    """
+
+    for k in requestData.keys():
+        if k in ['id', 'dateTimeCreated', 'dateTimeModified', 'dateAndTimeOfOrder']:
+            requestData.pop(k)
+            continue
+        if type(requestData[k]) == str:
+            requestData[k].strip()
+    return requestData
+
+
+class SanitizePassword():
+    def __init__(self, password):
+        '''
+        Function to validate user password.
+        '''
+
+        self.password = password
+
+        if len(password) < 8:
+            self.error = {'message': 'Password must have at least 8 characters',
+                          'status': status.HTTP_400_BAD_REQUEST}
+
+        passwordHasNumber = False
+        for intChar in ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9']:
+            if intChar in password:
+                passwordHasNumber = True
+                break
+        if passwordHasNumber == False:
+            self.error = {'message': 'Password must have at least a number',
+                          'status': status.HTTP_400_BAD_REQUEST}
+
+        passwordHasLowerCase = False
+        for intChar in ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z']:
+            if intChar in password:
+                passwordHasLowerCase = True
+                break
+        if passwordHasLowerCase == False:
+            self.error = {'message': 'Password must be alphanumeric with lower and upper case characters',
+                          'status': status.HTTP_400_BAD_REQUEST}
+
+        passwordHasHigherCase = False
+        for intChar in ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z']:
+            if intChar in password:
+                passwordHasHigherCase = True
+                break
+        if passwordHasHigherCase == False:
+            self.error = {'message': 'Password must be alphanumeric with lower and upper case characters',
+                          'status': status.HTTP_400_BAD_REQUEST}
+
+    def passwordError(self):
+        '''
+        Response to be called in the case of an error.
+        '''
+        return Response({'message': self.error['message']
+                         }, status=self.error['status'])
+
+    def hashPassword(self):
+        '''
+        Function to hash valid user password.
+        '''
+        encodedPassword = self.password.encode('utf-8')
+        return bcrypt.hashpw(
+            encodedPassword, bcrypt.gensalt())
+
+
 def getDataById(relationalModel, relationId, modelSerializer):
     """
     Function that gets data by id.
@@ -50,54 +152,63 @@ def getDataById(relationalModel, relationId, modelSerializer):
     try:
         relationObject = relationalModel.objects.get(id=relationId)
     except relationalModel.DoesNotExist:
-        return None
-
-    return modelSerializer(relationObject)
-
-
-def userAuthProcess(request, userType):
-    """
-    Function that handles both authentication and authorization of users.
-    """
-
-    # Authenticate user
-
-    if 'FVA-USER' not in request.COOKIES.keys():
-        return {'error': {
-            'message': 'Log on to {}login to login'.format(app_base_route), 'status': status.HTTP_403_FORBIDDEN}}
-
-    accessToken = request.COOKIES.get('FVA-USER')
-
-    try:
-        userPayload = api_settings.JWT_DECODE_HANDLER(accessToken)
-    except:
-        return {
-            'error': {'message': 'Log on to {}login to login'.format(app_base_route),
-                      'status': status.HTTP_401_UNAUTHORIZED}
-        }
-
-    # Authorize user
-
-    for k, v in userPayload.items():
-        if type(v) == list:
-            userPayload[k] = v[0]
-
-    if userPayload['username'] != userType:
-        return {'error': {
-            'message': 'Only {}s are allowed'.format(userType), 'status': status.HTTP_403_FORBIDDEN}}
-
-    return userPayload
+        return Response(status=status.HTTP_404_NOT_FOUND)
+    return Response(modelSerializer(relationObject).data)
 
 
-def getDefaultForeignKey(RelatedModel):
-    try:
-        relatedModel = RelatedModel.objects.values_list('id', flat=True)
-    except RelatedModel.DoesNotExist:
-        return {'error': {
-            'message': 'Issue with related data. Contact us at mailto:help@fva.org to rectify this issue.', 'status': status.HTTP_500_INTERNAL_SERVER_ERROR}}
+class UserAuthProcess():
+    def __init__(self, request, userType):
+        """
+        Function that handles both authentication and authorization of users.
+        """
 
-    listOfPrimaryKeys = list(relatedModel)
-    return listOfPrimaryKeys[0]
+        # Authenticate user
+
+        if 'FVA-USER' not in request.COOKIES.keys():
+            self.error = {'message': 'Log on to {}login to login'.format(app_base_route),
+                          'status': status.HTTP_403_FORBIDDEN}
+
+        accessToken = request.COOKIES.get('FVA-USER')
+
+        try:
+            userPayload = api_settings.JWT_DECODE_HANDLER(accessToken)
+        except:
+            self.error = {'message': 'Log on to {}login to login'.format(app_base_route),
+                          'status': status.HTTP_401_UNAUTHORIZED}
+
+        # Authorize user
+
+        for k, v in userPayload.items():
+            if type(v) == list:
+                userPayload[k] = v[0]
+
+        if userPayload['username'] != userType:
+            self.error = {'message': 'Only {}s are allowed'.format(userType),
+                          'status': status.HTTP_403_FORBIDDEN}
+
+        self.userPayload = userPayload
+
+    def errorResponse(self):
+        """
+        Response to be called in the case of an error.
+        """
+        return Response({'message': self.error['message']
+                         }, status=self.error['status'])
+
+
+class getDefaultForeignKey():
+    def __init__(self, RelatedModel):
+        try:
+            relatedModel = RelatedModel.objects.values_list('id', flat=True)
+        except RelatedModel.DoesNotExist:
+            self.error = {'message': 'Issue with related data. Contact us at mailto:help@fva.org to rectify this issue.',
+                          'status': status.HTTP_500_INTERNAL_SERVER_ERROR}
+
+        self.defaultForeignKey = list(relatedModel)[0]
+
+    def errorResponse(self):
+        return Response({'message': self.error['message']
+                         }, status=self.error['status'])
 
 
 #########################################################################################
@@ -178,21 +289,33 @@ class LoginAPIView(APIView):
         API method that allows a user to log in.
         """
 
+        # validate user input
+
+        requestData = {**request.data}
+
+        requiredFields = EnsureRequiredFields(
+            ['email', 'password'], requestData.keys())
+        try:
+            if requiredFields.error:
+                return requiredFields.errorResponse()
+        except:
+            pass
+
         # check that user is signed up
 
         try:
             authUser = Auth.objects.get(
-                email=request.data['email'])
+                email=requestData['email'])
         except Auth.DoesNotExist:
             return Response({
-                'message': 'You are not registered on this FVA app. Log on to {}vendor/ to sign up as a vendor or {}customer/ to sign up as customer'.format(app_base_route)
+                'message': 'You are not registered on this FVA app. Log on to {}vendor/ to sign up as a vendor or {}customer/ to sign up as customer'.format(app_base_route, app_base_route)
             }, status=status.HTTP_401_UNAUTHORIZED)
 
         # authenticate user
 
         try:
             authUser = Auth.objects.get(
-                email=request.data['email'], password=request.data['password'])
+                email=requestData['email'], password=requestData['password'])
         except Auth.DoesNotExist:
             return Response({
                 'message': 'Wrong username or password'
@@ -204,44 +327,41 @@ class LoginAPIView(APIView):
         # confirm user profile
 
         try:
-            vendor = Vendor.objects.get(email=request.data['email'])
+            vendor = Vendor.objects.get(email=requestData['email'])
         except Vendor.DoesNotExist:
-            vendor = None
-
-        try:
-            customer = Customer.objects.get(email=request.data['email'])
-        except Customer.DoesNotExist:
-            customer = None
+            try:
+                customer = Customer.objects.get(email=requestData['email'])
+            except Customer.DoesNotExist:
+                return Response({
+                    'message': 'No user profile matching this user. Contact us at mailto:help@fva.org to rectify this issue.'
+                }, status=status.HTTP_404_NOT_FOUND)
 
         # process response
 
-        if vendor == None and customer == None:
-            return Response({
-                'message': 'No user profile matching this user. Contact us at mailto:help@fva.org to rectify this issue.'
-            }, status=status.HTTP_404_NOT_FOUND)
-
-        if vendor == None:
-            customerSerializer = CustomerSerializer(customer)
-            accessToken = self.generateToken(customerSerializer, 'customer')
-            return Response(
-                {'lastLogin': str(datetime.now()),
-                 'data': customerSerializer.data},
-                headers={
-                    'Set-Cookie': 'FVA-USER={}; domain={}; path=/api/auth; max-age=72000'.format(accessToken, getenv('APP_DOMAIN_NAME'))
-                })
-
-        if customer == None:
+        if vendor:
             vendorSerializer = VendorSerializer(vendor)
             accessToken = self.generateToken(vendorSerializer, 'vendor')
             return Response(
-                {'lastLogin': str(datetime.utcnow()),
+                {'latestLogin': str(datetime.utcnow()),
+                 'exp': '20-hrs',
                  'data': vendorSerializer.data},
                 headers={
-                    'Set-Cookie': 'FVA-USER={}; domain={}; path=/api/auth; max-age=72000'.format(accessToken, getenv('APP_DOMAIN_NAME'))
+                    'Set-Cookie': 'FVA-USER={}; domain={}; path=/api/auth; max-age=72000; HttpOnly'.format(accessToken, getenv('APP_DOMAIN_NAME'))
+                })
+
+        if customer:
+            customerSerializer = CustomerSerializer(customer)
+            accessToken = self.generateToken(customerSerializer, 'customer')
+            return Response(
+                {'latestLogin': str(datetime.utcnow()),
+                 'exp': '20-hrs',
+                 'data': customerSerializer.data},
+                headers={
+                    'Set-Cookie': 'FVA-USER={}; domain={}; path=/api/auth; max-age=72000; HttpOnly'.format(accessToken, getenv('APP_DOMAIN_NAME'))
                 })
 
         return Response({
-            'message': 'Conflicting user profile. Contact us at mailto:help@fva.org to rectify this issue.'
+            'message': 'Conflicting user profile? Contact us at mailto:tobia807@gmail.com.'
         }, status=status.HTTP_422_UNPROCESSABLE_ENTITY)
 
 
@@ -267,15 +387,45 @@ class VendorAPIView(APIView):
         API method that allows a new vendor to be created.
         """
 
+        # validate user input
+
+        requestData = protectRestrictedInput({**request.data})
+
+        requiredFields = EnsureRequiredFields(
+            ['businessName', 'email', 'phoneNumber', 'password'], requestData.keys())
+        try:
+            if requiredFields.error:
+                return requiredFields.errorResponse()
+        except:
+            pass
+
+        emailFormat = '^[a-z0-9]+[\._]?[a-za-z0-9]+[@]\w+[.]\w{2,3}$'
+        if not regex.search(emailFormat, requestData['email']):
+            return Response({'message': 'Invalid email'}, status=status.HTTP_400_BAD_REQUEST)
+
+        phone = phoneparse(requestData['phoneNumber'], 'NG')
+        if not is_valid_number(phone):
+            return Response({'message': 'Phone number must be valid Nigerian number'}, status=status.HTTP_400_BAD_REQUEST)
+        requestData['phoneNumber'] = format_phone(
+            phone, PhoneNumberFormat.E164)
+
+        validPassword = SanitizePassword(requestData['password'])
+        try:
+            if validPassword.error:
+                return validPassword.passwordError()
+            requestData['password'] = validPassword.hashPassword()
+        except:
+            pass
+
         # register user
 
-        authSerializer = AuthSerializer(data=request.data)
+        authSerializer = AuthSerializer(data=requestData)
 
         if authSerializer.is_valid():
 
             # create user profile
 
-            vendorSerializer = VendorSerializer(data=request.data)
+            vendorSerializer = VendorSerializer(data=requestData)
 
             if vendorSerializer.is_valid():
                 authSerializer.save()
@@ -299,15 +449,45 @@ class CustomerAPIView(APIView):
         API method that allows a new customer to be created.
         """
 
+        # validate user input
+
+        requestData = protectRestrictedInput({**request.data})
+
+        requiredFields = EnsureRequiredFields(
+            ['firstname', 'lastname', 'email', 'phoneNumber', 'password'], requestData.keys())
+        try:
+            if requiredFields.error:
+                return requiredFields.errorResponse()
+        except:
+            pass
+
+        emailFormat = '^[a-z0-9]+[\._]?[a-za-z0-9]+[@]\w+[.]\w{2,3}$'
+        if not regex.search(emailFormat, requestData['email']):
+            return Response({'message': 'Invalid email'}, status=status.HTTP_400_BAD_REQUEST)
+
+        phone = phoneparse(requestData['phoneNumber'], 'NG')
+        if not is_valid_number(phone):
+            return Response({'message': 'Phone number must be valid Nigerian number'}, status=status.HTTP_400_BAD_REQUEST)
+        requestData['phoneNumber'] = format_phone(
+            phone, PhoneNumberFormat.E164)
+
+        validPassword = SanitizePassword(requestData['password'])
+        try:
+            if validPassword.error:
+                return validPassword.passwordError()
+            requestData['password'] = validPassword.hashPassword()
+        except:
+            pass
+
         # register user
 
-        authSerializer = AuthSerializer(data=request.data)
+        authSerializer = AuthSerializer(data=requestData)
 
         if authSerializer.is_valid():
 
             # create user profile
 
-            customerSerializer = CustomerSerializer(data=request.data)
+            customerSerializer = CustomerSerializer(data=requestData)
 
             if customerSerializer.is_valid():
                 authSerializer.save()
@@ -338,11 +518,13 @@ class AuthVendorMenuAPIView(APIView):
 
         # Authenticate/Authorize user
 
-        userPayload = userAuthProcess(request, 'vendor')
-
-        if 'error' in userPayload.keys():
-            return Response({'message': userPayload['error']['message']
-                             }, status=userPayload['error']['status'])
+        userAuth = UserAuthProcess(request, 'vendor')
+        try:
+            if userAuth.error:
+                return userAuth.errorResponse()
+        except:
+            pass
+        userPayload = userAuth.userPayload
 
         try:
             menu = Menu.objects.filter(vendorId=userPayload['user_id'])
@@ -359,32 +541,42 @@ class AuthVendorMenuAPIView(APIView):
 
         # Authenticate/Authorize user
 
-        userPayload = userAuthProcess(request, 'vendor')
-
-        if 'error' in userPayload.keys():
-            return Response({'message': userPayload['error']['message']
-                             }, status=userPayload['error']['status'])
+        userAuth = UserAuthProcess(request, 'vendor')
+        try:
+            if userAuth.error:
+                return userAuth.errorResponse()
+        except:
+            pass
+        userPayload = userAuth.userPayload
 
         # validate input data
 
-        if request.data['isRecurring'] == True and len(request.data['frequencyOfReoccurrence']) < 1:
+        requestData = protectRestrictedInput({**request.data})
+
+        requiredFields = EnsureRequiredFields(['name', 'price', 'quantity', 'unit',
+                                               'isRecurring', 'frequencyOfReoccurrence'], requestData.keys())
+        try:
+            if requiredFields.error:
+                return requiredFields.errorResponse()
+        except:
+            pass
+
+        if 'description' in requestData.keys() and len(requestData['description']) < 5:
+            requestData.pop('description')
+
+        if requestData['isRecurring'] == True and len(requestData['frequencyOfReoccurrence']) < 1:
             return Response({'message': 'Frequency of re-occurrence must be stated if menu re-occurs'
                              }, status=status.HTTP_400_BAD_REQUEST)
 
-        if request.data['isRecurring'] == False and len(request.data['frequencyOfReoccurrence']) > 0:
+        if requestData['isRecurring'] == False and len(requestData['frequencyOfReoccurrence']) > 0:
             return Response({'message': 'Frequency of re-occurrence must be nil if menu does not re-occur'
                              }, status=status.HTTP_400_BAD_REQUEST)
 
-        menuRequestData = {**request.data}
-        menuRequestData['vendorId'] = userPayload['user_id']
-
-        for k in menuRequestData.keys():
-            if k in ['id', 'dateTimeCreated']:
-                menuRequestData.pop(k)
+        requestData['vendorId'] = userPayload['user_id']
 
         # Create the food menu
 
-        menuSerializer = MenuSerializer(data=menuRequestData)
+        menuSerializer = MenuSerializer(data=requestData)
 
         if menuSerializer.is_valid():
             menuSerializer.save()
@@ -407,11 +599,13 @@ class AuthVendorMenuDetailAPIView(APIView):
 
         # Authenticate/Authorize user
 
-        userPayload = userAuthProcess(request, 'vendor')
-
-        if 'error' in userPayload.keys():
-            return Response({'message': userPayload['error']['message']
-                             }, status=userPayload['error']['status'])
+        userAuth = UserAuthProcess(request, 'vendor')
+        try:
+            if userAuth.error:
+                return userAuth.errorResponse()
+        except:
+            pass
+        userPayload = userAuth.userPayload
 
         try:
             menu = Menu.objects.get(
@@ -429,27 +623,36 @@ class AuthVendorMenuDetailAPIView(APIView):
 
         # Authenticate/Authorize user
 
-        userPayload = userAuthProcess(request, 'vendor')
-
-        if 'error' in userPayload.keys():
-            return Response({'message': userPayload['error']['message']
-                             }, status=userPayload['error']['status'])
+        userAuth = UserAuthProcess(request, 'vendor')
+        try:
+            if userAuth.error:
+                return userAuth.errorResponse()
+        except:
+            pass
+        userPayload = userAuth.userPayload
 
         # validate input data
 
-        if request.data['isRecurring'] == True and len(request.data['frequencyOfReoccurrence']) < 1:
+        requestData = protectRestrictedInput({**request.data})
+
+        requiredFields = EnsureRequiredFields(['name', 'price', 'quantity', 'unit',
+                                               'isRecurring', 'frequencyOfReoccurrence'], requestData.keys())
+        try:
+            if requiredFields.error:
+                return requiredFields.errorResponse()
+        except:
+            pass
+
+        if 'description' in requestData.keys() and len(requestData['description']) < 5:
+            requestData.pop('description')
+
+        if requestData['isRecurring'] == True and len(requestData['frequencyOfReoccurrence']) < 1:
             return Response({'message': 'Frequency of re-occurrence must be stated if menu re-occurs'
                              }, status=status.HTTP_400_BAD_REQUEST)
 
-        if request.data['isRecurring'] == False and len(request.data['frequencyOfReoccurrence']) > 0:
+        if requestData['isRecurring'] == False and len(requestData['frequencyOfReoccurrence']) > 0:
             return Response({'message': 'Frequency of re-occurrence must be nil if menu does not re-occur'
                              }, status=status.HTTP_400_BAD_REQUEST)
-
-        menuRequestData = {**request.data}
-
-        for k in menuRequestData.keys():
-            if k in ['id', 'dateTimeCreated']:
-                menuRequestData.pop(k)
 
         # Get the required menu
 
@@ -461,7 +664,7 @@ class AuthVendorMenuDetailAPIView(APIView):
 
         # Update the food menu
 
-        menuSerializer = MenuSerializer(menu, menuRequestData, partial=True)
+        menuSerializer = MenuSerializer(menu, requestData, partial=True)
 
         if menuSerializer.is_valid():
             menuSerializer.save()
@@ -475,11 +678,13 @@ class AuthVendorMenuDetailAPIView(APIView):
 
         # Authenticate/Authorize user
 
-        userPayload = userAuthProcess(request, 'vendor')
-
-        if 'error' in userPayload.keys():
-            return Response({'message': userPayload['error']['message']
-                             }, status=userPayload['error']['status'])
+        userAuth = UserAuthProcess(request, 'vendor')
+        try:
+            if userAuth.error:
+                return userAuth.errorResponse()
+        except:
+            pass
+        userPayload = userAuth.userPayload
 
         # Get the required food menu
 
@@ -510,11 +715,13 @@ class AuthVendorOrderAPIView(APIView):
 
         # Authenticate/Authorize user
 
-        userPayload = userAuthProcess(request, 'vendor')
-
-        if 'error' in userPayload.keys():
-            return Response({'message': userPayload['error']['message']
-                             }, status=userPayload['error']['status'])
+        userAuth = UserAuthProcess(request, 'vendor')
+        try:
+            if userAuth.error:
+                return userAuth.errorResponse()
+        except:
+            pass
+        userPayload = userAuth.userPayload
 
         # check for vendors orders
 
@@ -542,11 +749,13 @@ class AuthVendorOrderDetailAPIView(APIView):
 
         # Authenticate/Authorize user
 
-        userPayload = userAuthProcess(request, 'vendor')
-
-        if 'error' in userPayload.keys():
-            return Response({'message': userPayload['error']['message']
-                             }, status=userPayload['error']['status'])
+        userAuth = UserAuthProcess(request, 'vendor')
+        try:
+            if userAuth.error:
+                return userAuth.errorResponse()
+        except:
+            pass
+        userPayload = userAuth.userPayload
 
         try:
             order = Order.objects.get(
@@ -564,11 +773,13 @@ class AuthVendorOrderDetailAPIView(APIView):
 
         # Authenticate/Authorize user
 
-        userPayload = userAuthProcess(request, 'vendor')
-
-        if 'error' in userPayload.keys():
-            return Response({'message': userPayload['error']['message']
-                             }, status=userPayload['error']['status'])
+        userAuth = UserAuthProcess(request, 'vendor')
+        try:
+            if userAuth.error:
+                return userAuth.errorResponse()
+        except:
+            pass
+        userPayload = userAuth.userPayload
 
         # Get the required order
 
@@ -616,11 +827,13 @@ class AuthVendorSalesReportAPIView(APIView):
 
         # Authenticate/Authorize user
 
-        userPayload = userAuthProcess(request, 'vendor')
-
-        if 'error' in userPayload.keys():
-            return Response({'message': userPayload['error']['message']
-                             }, status=userPayload['error']['status'])
+        userAuth = UserAuthProcess(request, 'vendor')
+        try:
+            if userAuth.error:
+                return userAuth.errorResponse()
+        except:
+            pass
+        userPayload = userAuth.userPayload
 
         # Check through orders to extract vital info for the sales report
 
@@ -679,11 +892,13 @@ class VendorNotificationAPIView(APIView):
 
         # Authenticate/Authorize user
 
-        userPayload = userAuthProcess(request, 'vendor')
-
-        if 'error' in userPayload.keys():
-            return Response({'message': userPayload['error']['message']
-                             }, status=userPayload['error']['status'])
+        userAuth = UserAuthProcess(request, 'vendor')
+        try:
+            if userAuth.error:
+                return userAuth.errorResponse()
+        except:
+            pass
+        userPayload = userAuth.userPayload
 
         # Check for orders associated with vendor
 
@@ -715,7 +930,7 @@ class VendorNotificationAPIView(APIView):
         try:
             messageStatus = MessageStatus.objects.all()
         except MessageStatus.DoesNotExist:
-            return Response({'message': 'An issue with our message status. Please contact tobia807@gmail.com'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'message': 'An issue with our message status. Please contact mailto:tobia807@gmail.com'}, status=status.HTTP_400_BAD_REQUEST)
 
         messageStatusSerializer = MessageStatusSerializer(
             messageStatus, many=True)
@@ -737,31 +952,37 @@ class VendorNotificationAPIView(APIView):
 
         # Authenticate/Authorize user
 
-        userPayload = userAuthProcess(request, 'vendor')
-
-        if 'error' in userPayload.keys():
-            return Response({'message': userPayload['error']['message']
-                             }, status=userPayload['error']['status'])
-
-        notificationRequestData = {**request.data}
+        userAuth = UserAuthProcess(request, 'vendor')
+        try:
+            if userAuth.error:
+                return userAuth.errorResponse()
+        except:
+            pass
+        userPayload = userAuth.userPayload
 
         # Validate user input
 
+        requestData = protectRestrictedInput({**request.data})
+
+        requiredFields = EnsureRequiredFields(
+            ['subjectUser', 'orderId', 'message', 'messageStatusId'], requestData.keys())
+        try:
+            if requiredFields.error:
+                return requiredFields.errorResponse()
+        except:
+            pass
+
         try:
             Order.objects.filter(
-                vendorId=userPayload['user_id'], customerId=notificationRequestData['subjectUser'])
+                vendorId=userPayload['user_id'], customerId=requestData['subjectUser'])
         except Order.DoesNotExist:
             return Response({'message': 'No recipient found for the given order'}, status=status.HTTP_404_NOT_FOUND)
-
-        for k in notificationRequestData.keys():
-            if k in ['id', 'dateTimeCreated']:
-                notificationRequestData.pop(k)
 
         # Get message status name
 
         try:
             messageStatus = MessageStatus.objects.get(
-                id=notificationRequestData['messageStatusId'])
+                id=requestData['messageStatusId'])
         except MessageStatus.DoesNotExist:
             return Response({'message': 'Invalid message status'}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -770,7 +991,7 @@ class VendorNotificationAPIView(APIView):
         # Send notification
 
         notificationSerializer = NotificationSerializer(
-            data=notificationRequestData)
+            data=requestData)
 
         if notificationSerializer.is_valid():
             notificationSerializer.save()
@@ -796,11 +1017,13 @@ class VendorNotificationDetailAPIView(APIView):
 
         # Authenticate/Authorize user
 
-        userPayload = userAuthProcess(request, 'vendor')
-
-        if 'error' in userPayload.keys():
-            return Response({'message': userPayload['error']['message']
-                             }, status=userPayload['error']['status'])
+        userAuth = UserAuthProcess(request, 'vendor')
+        try:
+            if userAuth.error:
+                return userAuth.errorResponse()
+        except:
+            pass
+        userPayload = userAuth.userPayload
 
         try:
             orders = Order.objects.filter(vendorId=userPayload['user_id'])
@@ -825,7 +1048,7 @@ class VendorNotificationDetailAPIView(APIView):
                     messageStatus = MessageStatus.objects.get(
                         id=notificationSerializer.data['messageStatusId'])
                 except MessageStatus.DoesNotExist:
-                    return Response({'message': 'An issue with our message status. Please contact tobia807@gmail.com'}, status=status.HTTP_400_BAD_REQUEST)
+                    return Response({'message': 'An issue with our message status. Please contact mailto:tobia807@gmail.com'}, status=status.HTTP_400_BAD_REQUEST)
 
                 messageStatusSerializer = MessageStatusSerializer(
                     messageStatus)
@@ -855,11 +1078,13 @@ class AuthCustomerOrderAPIView(APIView):
 
         # Authenticate/Authorize user
 
-        userPayload = userAuthProcess(request, 'customer')
-
-        if 'error' in userPayload.keys():
-            return Response({'message': userPayload['error']['message']
-                             }, status=userPayload['error']['status'])
+        userAuth = UserAuthProcess(request, 'customer')
+        try:
+            if userAuth.error:
+                return userAuth.errorResponse()
+        except:
+            pass
+        userPayload = userAuth.userPayload
 
         try:
             order = Order.objects.filter(customerId=userPayload['user_id'])
@@ -877,79 +1102,84 @@ class AuthCustomerOrderAPIView(APIView):
 
         # Authenticate/Authorize user
 
-        userPayload = userAuthProcess(request, 'customer')
-
-        if 'error' in userPayload.keys():
-            return Response({'message': userPayload['error']['message']
-                             }, status=userPayload['error']['status'])
+        userAuth = UserAuthProcess(request, 'customer')
+        try:
+            if userAuth.error:
+                return userAuth.errorResponse()
+        except:
+            pass
+        userPayload = userAuth.userPayload
 
         # validate user input
 
-        orderRequestData = {**request.data}
+        requestData = protectRestrictedInput({**request.data})
 
-        for k in orderRequestData.keys():
-            if k in ['id', 'dateAndTimeOfOrder']:
-                orderRequestData.pop(k)
+        requiredFields = EnsureRequiredFields(
+            ['vendorId', 'itemsOrdered'], requestData.keys())
+        try:
+            if requiredFields.error:
+                return requiredFields.errorResponse()
+        except:
+            pass
 
-        if 'description' in orderRequestData.keys() and len(orderRequestData['description']) < 5:
-            orderRequestData.pop('description')
+        if 'description' in requestData.keys() and len(requestData['description']) < 5:
+            requestData.pop('description')
 
-        if 'preOrderDateTime' in orderRequestData.keys():
-            if len(orderRequestData['preOrderDateTime']) == 0:
-                orderRequestData.pop('preOrderDateTime')
-            elif len(orderRequestData['preOrderDateTime']) < 13:
+        if 'preOrderDateTime' in requestData.keys():
+            if len(requestData['preOrderDateTime']) == 0:
+                requestData.pop('preOrderDateTime')
+            elif len(requestData['preOrderDateTime']) < 13:
                 return Response({'message': 'Wrong date/time format. yyyy-mm-dd-hh'}, status.HTTP_400_BAD_REQUEST)
 
-        orderRequestData['customerId'] = userPayload['user_id']
+        requestData['customerId'] = userPayload['user_id']
 
         # Check for order status
 
         orderStatusId = getDefaultForeignKey(OrderStatus)
 
         try:
-            if orderStatusId['error']:
-                return Response({'message': orderStatusId['error']['message']
-                                 }, status=orderStatusId['error']['status'])
+            if orderStatusId.error:
+                return orderStatusId.errorResponse()
         except:
             pass
 
-        orderRequestData['orderStatusId'] = orderStatusId
+        requestData['orderStatusId'] = orderStatusId
 
         # check that menu exists
 
         amountDue = 0
 
-        for menuId in orderRequestData['itemsOrdered']:
+        for menuId in requestData['itemsOrdered']:
             try:
                 menu = Menu.objects.get(
-                    vendorId=orderRequestData['vendorId'], id=menuId)
+                    vendorId=requestData['vendorId'], id=menuId)
             except Menu.DoesNotExist:
                 return Response({'message': 'The selected menu ({}) is not available for order'.format(menuId)}, status.HTTP_404_NOT_FOUND)
 
             menuSerializer = MenuSerializer(menu)
             amountDue += menuSerializer.data['price']
 
-        orderRequestData['amountDue'] = amountDue
-        orderRequestData['amountOutstanding'] = amountDue
+        requestData['amountDue'] = amountDue
+        requestData['amountOutstanding'] = amountDue
 
         # handle pre-orders
 
-        if 'preOrderDateTime' in orderRequestData.keys():
+        if 'preOrderDateTime' in requestData.keys():
 
             try:
-                orderRequestData['preOrderDateTime'] = datetime.strptime(
-                    orderRequestData['preOrderDateTime'], '%Y-%m-%dT%H:%M:%S.%fZ').astimezone(tz=pytz.utc)
+                requestData['preOrderDateTime'] = datetime.strptime(
+                    requestData['preOrderDateTime'], '%Y-%m-%dT%H:%M:%S.%fZ').astimezone(tz=pytz.utc)
             except:
                 return Response({'message': 'Invalid date/time format => yyyy-mm-ddThh:mm:ss.ffffffZ'}, status.HTTP_400_BAD_REQUEST)
 
             currentDateTime = datetime.utcnow().astimezone(tz=pytz.utc)
 
-            if (orderRequestData['preOrderDateTime'] - currentDateTime).seconds < 18000 or (orderRequestData['preOrderDateTime'] - currentDateTime).days > 3:
+            if (requestData['preOrderDateTime'] - currentDateTime).seconds < 18000 or (requestData['preOrderDateTime'] - currentDateTime).days > 3:
                 return Response({'message': 'Unacceptable pre-order. Pre-order is valid between 5 hours and 3 days after the order is placed'}, status.HTTP_400_BAD_REQUEST)
 
         # Create the food order
 
-        orderSerializer = OrderSerializer(data=orderRequestData)
+        orderSerializer = OrderSerializer(data=requestData)
 
         if orderSerializer.is_valid():
             orderSerializer.save()
@@ -972,11 +1202,13 @@ class AuthCustomerOrderDetailAPIView(APIView):
 
         # Authenticate/Authorize user
 
-        userPayload = userAuthProcess(request, 'customer')
-
-        if 'error' in userPayload.keys():
-            return Response({'message': userPayload['error']['message']
-                             }, status=userPayload['error']['status'])
+        userAuth = UserAuthProcess(request, 'customer')
+        try:
+            if userAuth.error:
+                return userAuth.errorResponse()
+        except:
+            pass
+        userPayload = userAuth.userPayload
 
         try:
             order = Order.objects.get(
@@ -994,11 +1226,13 @@ class AuthCustomerOrderDetailAPIView(APIView):
 
         # Authenticate/Authorize user
 
-        userPayload = userAuthProcess(request, 'customer')
-
-        if 'error' in userPayload.keys():
-            return Response({'message': userPayload['error']['message']
-                             }, status=userPayload['error']['status'])
+        userAuth = UserAuthProcess(request, 'customer')
+        try:
+            if userAuth.error:
+                return userAuth.errorResponse()
+        except:
+            pass
+        userPayload = userAuth.userPayload
 
         # Get the required food order
 
@@ -1036,11 +1270,13 @@ class AuthCustomerOrderPaymentAPIView(APIView):
 
         # Authenticate/Authorize user
 
-        userPayload = userAuthProcess(request, 'customer')
-
-        if 'error' in userPayload.keys():
-            return Response({'message': userPayload['error']['message']
-                             }, status=userPayload['error']['status'])
+        userAuth = UserAuthProcess(request, 'customer')
+        try:
+            if userAuth.error:
+                return userAuth.errorResponse()
+        except:
+            pass
+        userPayload = userAuth.userPayload
 
         # validate user input
 
@@ -1090,11 +1326,15 @@ class CustomerNotificationAPIView(APIView):
 
         # Authenticate/Authorize user
 
-        userPayload = userAuthProcess(request, 'customer')
+        userAuth = UserAuthProcess(request, 'customer')
+        try:
+            if userAuth.error:
+                return userAuth.errorResponse()
+        except:
+            pass
+        userPayload = userAuth.userPayload
 
-        if 'error' in userPayload.keys():
-            return Response({'message': userPayload['error']['message']
-                             }, status=userPayload['error']['status'])
+        # Get notifications for the customer
 
         try:
             notifications = Notification.objects.filter(
@@ -1110,7 +1350,7 @@ class CustomerNotificationAPIView(APIView):
         try:
             messageStatus = MessageStatus.objects.all()
         except MessageStatus.DoesNotExist:
-            return Response({'message': 'An issue with our message status. Please contact tobia807@gmail.com'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'message': 'An issue with our message status. Please contact mailto:tobia807@gmail.com'}, status=status.HTTP_400_BAD_REQUEST)
 
         messageStatusSerializer = MessageStatusSerializer(
             messageStatus, many=True)
@@ -1141,11 +1381,13 @@ class CustomerNotificationDetailAPIView(APIView):
 
         # Authenticate/Authorize user
 
-        userPayload = userAuthProcess(request, 'customer')
-
-        if 'error' in userPayload.keys():
-            return Response({'message': userPayload['error']['message']
-                             }, status=userPayload['error']['status'])
+        userAuth = UserAuthProcess(request, 'customer')
+        try:
+            if userAuth.error:
+                return userAuth.errorResponse()
+        except:
+            pass
+        userPayload = userAuth.userPayload
 
         try:
             notification = Notification.objects.get(
@@ -1161,7 +1403,7 @@ class CustomerNotificationDetailAPIView(APIView):
             messageStatus = MessageStatus.objects.get(
                 id=notificationSerializer.data['messageStatusId'])
         except MessageStatus.DoesNotExist:
-            return Response({'message': 'An issue with our message status. Please contact tobia807@gmail.com'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'message': 'An issue with our message status. Please contact mailto:tobia807@gmail.com'}, status=status.HTTP_400_BAD_REQUEST)
 
         messageStatusSerializer = MessageStatusSerializer(messageStatus)
         response = {**notificationSerializer.data}
@@ -1227,11 +1469,7 @@ class MenuDetailAPIView(APIView):
         Function that gets menu by id.
         """
 
-        menu = getDataById(Menu, menu_id, MenuSerializer)
-
-        if menu == None:
-            return Response(status=status.HTTP_404_NOT_FOUND)
-        return Response(menu.data)
+        return getDataById(Menu, menu_id, MenuSerializer)
 
 
 # get-a-vendor
@@ -1247,8 +1485,4 @@ class VendorDetailAPIView(APIView):
         API method that gets a database row by id.
         """
 
-        vendor = getDataById(Vendor, vendor_id, VendorSerializer)
-
-        if vendor == None:
-            return Response(status=status.HTTP_404_NOT_FOUND)
-        return Response(vendor.data)
+        return getDataById(Vendor, vendor_id, VendorSerializer)

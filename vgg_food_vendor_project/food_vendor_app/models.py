@@ -9,7 +9,7 @@ class Vendor(models.Model):
 
     email = models.EmailField(max_length=100, unique=True)
 
-    phoneNumber = models.CharField(max_length=16, unique=True)
+    phoneNumber = models.CharField(max_length=32, unique=True)
 
     dateTimeCreated = models.DateTimeField(auto_now_add=True, editable=False)
 
@@ -24,7 +24,7 @@ class Customer(models.Model):
 
     email = models.EmailField(max_length=100, unique=True)
 
-    phoneNumber = models.CharField(max_length=16, unique=True)
+    phoneNumber = models.CharField(max_length=32, unique=True)
 
     dateTimeCreated = models.DateTimeField(auto_now_add=True, editable=False)
 
