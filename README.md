@@ -6,7 +6,7 @@ Built with [Django REST Framework](https://www.django-rest-framework.org)
 
 Hosted on [food-vendor-api.herokuapp.com](https://tboyak-foodvendorapp.herokuapp.com)
 
-A more detailed documentation for this application can be found [here](https://drive.google.com/open?id=1AtUWIAsD-tCA5P7gaRxDhlS1PJKDyRHl)
+A more detailed documentation for this application can be found [here](https://drive.google.com/folderview?id=1C7ka-ijmcKL0T9pTUIzwzC4lN1aqtsvE
 
 
 ## Major routes
