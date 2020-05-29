@@ -1,4 +1,5 @@
 from os import getenv
+from django.shortcuts import render
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
@@ -140,8 +141,9 @@ class SanitizePassword():
         Function to hash valid user password.
         '''
         encodedPassword = self.password.encode('utf-8')
+        print('\n', encodedPassword, '\n')
         return bcrypt.hashpw(
-            encodedPassword, bcrypt.gensalt())
+            encodedPassword, bcrypt.gensalt()).decode('utf-8')
 
 
 def getDataById(relationalModel, relationId, modelSerializer):
@@ -214,6 +216,19 @@ class getDefaultForeignKey():
 #########################################################################################
 # LANDING VIEW
 #########################################################################################
+
+# Landing page of the project
+
+
+def index(request):
+    """
+    API endpoint for the projects landing page
+    """
+    context = {}
+    context['HTTP_HOST'] = request.META['HTTP_HOST']
+
+    print(context)
+    return render(request, 'index.html', context=context)
 
 
 class HomeDescAPIView(APIView):
@@ -315,7 +330,7 @@ class LoginAPIView(APIView):
 
         authSerializer = AuthSerializer(authUser)
 
-        if not bcrypt.checkpw(requestData['password'].encode('utf-8'), authSerializer.data['password']):
+        if not bcrypt.checkpw(requestData['password'].encode('utf-8'), authSerializer.data['password'].encode('utf-8')):
             return Response({
                 'message': 'Wrong username or password. Ensure your email and password are correct'.format(app_base_route, app_base_route)
             }, status=status.HTTP_401_UNAUTHORIZED)
@@ -334,7 +349,7 @@ class LoginAPIView(APIView):
 
         # process response
 
-        if vendor:
+        if 'vendor' in locals():
             vendorSerializer = VendorSerializer(vendor)
             accessToken = self.generateToken(vendorSerializer, 'vendor')
             return Response(
@@ -345,7 +360,7 @@ class LoginAPIView(APIView):
                     'Set-Cookie': 'FVA-USER={}; domain={}; path=/api/auth; max-age=72000; HttpOnly'.format(accessToken, getenv('APP_DOMAIN_NAME'))
                 })
 
-        if customer:
+        if 'customer' in locals():
             customerSerializer = CustomerSerializer(customer)
             accessToken = self.generateToken(customerSerializer, 'customer')
             return Response(
@@ -1035,7 +1050,7 @@ class VendorNotificationDetailAPIView(APIView):
             except Notification.DoesNotExist:
                 continue
 
-            if notification:
+            if 'notification' in locals():
                 notificationSerializer = NotificationSerializer(notification)
 
                 # Get message statuses

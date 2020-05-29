@@ -15,8 +15,10 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import include, path
+from vgg_food_vendor_project.food_vendor_app.views import index as landing_page
 
 urlpatterns = [
+    path('', landing_page, name='index'),
     path('api/', include('vgg_food_vendor_project.food_vendor_app.urls')),
     path('admin/', admin.site.urls),
     path('api-auth/', include('rest_framework.urls', namespace='rest_framework'))

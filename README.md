@@ -4,7 +4,7 @@ An API for food vendors to make transactions and communicate with their customer
 
 Built with [Django REST Framework](https://www.django-rest-framework.org)
 
-Hosted on [food-vendor-api.herokuapp.com](https://food-vendor-api.herokuapp.com)
+Hosted on [food-vendor-api.herokuapp.com](https://tboyak-foodvendorapp.herokuapp.com)
 
 A more detailed documentation for this application can be found [here](https://drive.google.com/open?id=1AtUWIAsD-tCA5P7gaRxDhlS1PJKDyRHl)
 
