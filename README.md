@@ -2,19 +2,46 @@
 
 An API for food vendors to make transactions and communicate with their customers
 
-## Users
+Built with [Django REST Framework](https://www.django-rest-framework.org)
+
+Hosted on [food-vendor-api.herokuapp.com](https://tboyak-foodvendorapp.herokuapp.com)
+
+A more detailed documentation for this application can be found [here](https://drive.google.com/folderview?id=1C7ka-ijmcKL0T9pTUIzwzC4lN1aqtsvE
+
+
+## Major routes
+
+1. *domain*/api/
+2. *domain*/admin/
+
+
+## Admin access
+
+Username: tboyak
+Password: asdf1234!
+
+## Types of Users
 
 - Vendors
 - Customers
+
+
+## Important To Note
+
+- All routes must end with a forward slash "/"
+- Timezones are UTC
+
 
 ## Core Features
 
 - Authentication and authorization
 - Food purchase / pre-order
-- Order management
+- Food order management
 - Notification
 
+
 ## Functional Requirements (Vendor)
+
 - The vendor should be able to sign up with name, email and phone number.
 - The vendor should be able to set a password.
 - The vendor should be able to log in with email and password.
@@ -25,7 +52,9 @@ An API for food vendors to make transactions and communicate with their customer
 - The vendor should be able to generate a daily report of sales.
 - The vendor should be able to send notifications to the customer on available menu or debts, order progress and other relevant information.  
 
+
 ## Functional Requirements (Customer)
+
 - Customer should be able to sign up with name, email and phone number.
 - Customer should be able to set a password.
 - Customer should be able to log in with email and password.

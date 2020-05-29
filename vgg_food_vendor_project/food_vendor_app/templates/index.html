@@ -1,0 +1,44 @@
+<DOCTYPE html>
+<html lang="en">
+    <head>
+        <title>Hello</title>
+        <meta charset="utf-8">
+        {% load static %}
+        <meta name="viewport" content="width=device, initial-scale=1">
+        <link rel="stylesheet" href="{% static 'css/styles.css' %}">
+    <head>
+    <body>
+        <header>
+            <h1>Welcome to your beloved Food Vendor App by Tboy-AK</h1>
+        </header>
+        <br>
+        <main>
+            <h2>Food Vendor API</h2>
+            <p>You can get the full documentation of this API at</p>
+            <h4>API Route</h4>
+            <p><a href="{{ HTTP_HOST }}/api">/api</a></p>
+            <h4>Admin Route</h4>
+            <p><a href="{{ HTTP_HOST }}/admin">/admin</a></p>
+        </main>
+        <br>
+        <footer>
+            <section id="social-info">
+                <h4>Developer Info</h4>
+                <p><span>Name:</span> Akanji Oluwatobiloba</p>
+                <p><span>GitHub:</span> <a href="https://github.com/Tboy-AK">Tboy-AK</a></p>
+                <p><span>LinkedIn:</span> <a href="https://linkedin.com/in/tobi-akanji-36a922149">Tobi Akanji</a></p>
+                <p><span>Twitter:</span> <a href="https://twitter.com/tboy_ak_">tboy_ak_</a></p>
+            </section>
+            <section id="contact-info">
+                <h4>Developer Contact</h4>
+                <p><span>Phone:</span> <a href="tel:+234-802-810-8283">0802810283</a></p>
+                <p><span>Email:</span> <a href="mailto:tobia07@gmail.com">tobia07@gmail.com</a></p>
+            </section>
+            <section id="regional-info">
+                <h4>Developer Regional</h4>
+                <p><span>Country:</span> Nigeria</p>
+                <p><span>State:</span> Lagos</p>
+            </section>
+        </footer>
+    </body>
+</html>
