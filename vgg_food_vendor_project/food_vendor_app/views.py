@@ -308,21 +308,17 @@ class LoginAPIView(APIView):
                 email=requestData['email'])
         except Auth.DoesNotExist:
             return Response({
-                'message': 'You are not registered on this FVA app. Log on to {}vendor/ to sign up as a vendor or {}customer/ to sign up as customer'.format(app_base_route, app_base_route)
+                'message': 'Wrong username or password. Log on to {}vendor/ to sign up as a vendor or {}customer/ to sign up as customer'.format(app_base_route, app_base_route)
             }, status=status.HTTP_401_UNAUTHORIZED)
 
-        # authenticate user
+        # confirm password
 
-        try:
-            authUser = Auth.objects.get(
-                email=requestData['email'], password=requestData['password'])
-        except Auth.DoesNotExist:
+        authSerializer = AuthSerializer(authUser)
+
+        if not bcrypt.checkpw(requestData['password'].encode('utf-8'), authSerializer.data['password']):
             return Response({
-                'message': 'Wrong username or password'
+                'message': 'Wrong username or password. Ensure your email and password are correct'.format(app_base_route, app_base_route)
             }, status=status.HTTP_401_UNAUTHORIZED)
-
-        serializer = AuthSerializer(authUser)
-        userId = serializer.data['id']
 
         # confirm user profile
 
@@ -413,9 +409,9 @@ class VendorAPIView(APIView):
         try:
             if validPassword.error:
                 return validPassword.passwordError()
-            requestData['password'] = validPassword.hashPassword()
         except:
             pass
+        requestData['password'] = validPassword.hashPassword()
 
         # register user
 
@@ -475,9 +471,9 @@ class CustomerAPIView(APIView):
         try:
             if validPassword.error:
                 return validPassword.passwordError()
-            requestData['password'] = validPassword.hashPassword()
         except:
             pass
+        requestData['password'] = validPassword.hashPassword()
 
         # register user
 
@@ -495,7 +491,7 @@ class CustomerAPIView(APIView):
                 return Response(customerSerializer.data, status=status.HTTP_201_CREATED)
             return Response(customerSerializer.errors, status=status.HTTP_400_BAD_REQUEST)
         else:
-            return Response(authSerializer.errors, status=status.HTTP_404_NOT_FOUND)
+            return Response(authSerializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
 #########################################################################################
